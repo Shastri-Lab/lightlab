@@ -520,7 +520,7 @@ class MeasuredSurface(object):
         if 'cmap' not in kwargs.keys():
             kwargs['cmap'] = cm.inferno  # pylint: disable=no-member
         if 'shading' not in kwargs.keys():
-            kwargs['shading'] = 'gouraud'
+            kwargs['shading'] = 'flat' # TODO: change back to 'gouraud', I think there is an issue with the grid shape
         YY, XX = np.meshgrid(self.absc[0], self.absc[1])
         plt.pcolormesh(XX, YY, np.array(self.ordi.T), *args, **kwargs)
         plt.autoscale(tight=True)
