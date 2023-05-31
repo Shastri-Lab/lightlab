@@ -24,6 +24,7 @@ if(len(log.handlers) == 0): # check if the logger already exists
     # add ch to logger
     log.addHandler(ch)
 
+#TODO: consolitdate this with base class. why is Queen's one different?
 class Aragon_BOSA_400_Queens (VISAInstrumentDriver):
 
     __apps = np.array(['BOSA', 'TLS', 'CA', 'MAIN'])
@@ -104,7 +105,7 @@ class Aragon_BOSA_400_Queens (VISAInstrumentDriver):
         if app is not None and app in self.__apps:
             try:
                 if app != 'MAIN':
-                    if self.__currApp is not 'MAIN':
+                    if self.__currApp != 'MAIN':
                         self.application('MAIN')
                     self.write('INST:STAT:MODE ' + str(app))
                     time.sleep(1)
@@ -209,6 +210,8 @@ class Aragon_BOSA_400_Queens (VISAInstrumentDriver):
                 x.append(data[i])
                 y.append(data[i+1])
         elif(form=='REAL'):
+            # TODO: this is clearly bugged since ask_TRACE_REAL is commented out
+            raise NotImplementedError("REAL spectrum not implemented")
             data = self.ask_TRACE_REAL()
             for i in range(0,len(data),1):
                 x.append(data[i][0])
