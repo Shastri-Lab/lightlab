@@ -153,7 +153,7 @@ class TekScopeAbstract(Configurable, AbstractDriver):
         if timeout is None:
             timeout = self.timeout / 1e3
         if timeout > 60:
-            logger.warning('Long timeout %s specified, testing', timeout)
+            logger.warning(f'Long timeout {timeout} specified, testing')
             old_avgCnt = self.timebaseConfig()['avgCnt']
             self.timebaseConfig(avgCnt=2)
             self._triggerAcquire(timeout=10)
@@ -207,7 +207,7 @@ class TekScopeAbstract(Configurable, AbstractDriver):
             * get(self._yScaleParam) \
             + get('YZERO')
 
-        timeDivision = float(self.getConfigParam('HORIZONTAL:MAIN:SCALE', forceHardware=True))
+        timeDivision = float(self.getConfigParam('HORIZONTAL:MAIN:SCALE'))
         time = np.linspace(-1, 1, len(voltage)) / 2 * timeDivision * 10
 
         return time, voltage

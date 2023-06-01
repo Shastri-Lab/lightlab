@@ -270,7 +270,7 @@ class PrologixGPIBObject(InstrumentSessionBase):
         with self._prologix_rm.connected() as pconn:
             pconn.send('++addr {}'.format(self._prologix_gpib_addr_formatted()))
             pconn.send(self._prologix_escape_characters(writeStr))
-    
+
 #     def read(self, withTimeout=None):
 #         logger.debug('%s - Q - %s', self.address, queryStr)
 #         retStr = self.query_raw_binary(queryStr, withTimeout)
@@ -295,7 +295,7 @@ class PrologixGPIBObject(InstrumentSessionBase):
         with self._prologix_rm.connected() as pconn:
             pconn.send('++addr {}'.format(self._prologix_gpib_addr_formatted()))
             pconn.send('++clr')
-            
+
     def query_raw_binary(self, queryStr, withTimeout=None):
         '''Read the unmodified string sent from the instrument to the
            computer. In contrast to query(), no termination characters
