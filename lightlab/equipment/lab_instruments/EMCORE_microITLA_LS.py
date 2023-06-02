@@ -6,6 +6,9 @@ Created on Thu Oct 10 11:16:12 2019
 @author: pi
 
 Create a pseudo-driver that sends NEC commands to server for execution
+
+TODO: incorporate safety checks from experiment notebooks into driver.
+e.g. waiting for power stabilization, checking for timeouts and errors, checking if frequency is valid, etc.
 """
 
 import zmq
@@ -32,9 +35,9 @@ class EMCORE_microITLA_LS():
 
     #powerRange = np.array([-20, 13])
 
-    def __init__(self, serial_number=None, address='europa', **kwargs):
+    def __init__(self, address, serial_number=None, **kwargs):
             self.serial_number = serial_number
-            self.address = address
+            self.address = address # address of the RPi server ('europa', 'callisto', or specific IP)
             
     def request(self, command):
         ''' General-purpose Request-Reply with client
@@ -136,3 +139,23 @@ class EMCORE_microITLA_LS():
 
     def port_close(self):
         return self.request("port_close")
+    
+    def clean_jump(self, start_f, target_f, map_file='1550_map.txt'):
+        return self.request(f"clean_jump___{start_f}___{target_f}___{map_file}")
+        
+    def clean_jump_micro_itla(self, target_index):
+        return self.request(f"clean_jump_micro_itla___{target_index}")
+        
+    def clean_jump_micro_itla_cal(self, start_f, grid, set_points):
+        return self.request(f"clean_jump_micro_itla_cal___{start_f}___{grid}___{set_points}")
+
+   
+if __name__ == '__main__':
+    server_address = '192.168.1.108'
+
+    serialnums = ['CRTMK2G0H1']
+    for sn in serialnums:
+        laser = EMCORE_microITLA_LS(server_address, serial_number=sn)
+        print(f'Accessed laser SN:{laser.get_serial_number()}')
+        print(laser.set_first_channel_frequency(193475))
+        print('----')

@@ -38,6 +38,7 @@ class TekScopeAbstract(Configurable, AbstractDriver):
     _runModeParam = None
     _runModeSingleShot = None
     _yScaleParam = None
+    _wfmprefix = 'WFMOUTPRE'
 
     def startup(self):
         # Make sure sampling and data transferring are in a consistent state
@@ -202,7 +203,7 @@ class TekScopeAbstract(Configurable, AbstractDriver):
                 YZERO, the reference voltage, YOFF, the offset position, and
                 YSCALE, the conversion factor between position and voltage.
         '''
-        get = lambda param: float(self.getConfigParam('WFMOUTPRE:' + param, forceHardware=True))
+        get = lambda param: float(self.getConfigParam(self._wfmprefix+':' + param, forceHardware=True))
         voltage = (np.array(voltRaw) - get('YOFF')) \
             * get(self._yScaleParam) \
             + get('YZERO')
@@ -217,8 +218,7 @@ class TekScopeAbstract(Configurable, AbstractDriver):
 
             Normally, this will be '"V"', which can be converted to 'V'
         '''
-
-        yunit_query = self.getConfigParam('WFMOUTPRE:YUNIT', forceHardware=True)
+        yunit_query = self.getConfigParam(self._wfmprefix+':YUNIT', forceHardware=True)
         return yunit_query.replace('"', '')
 
     def wfmDb(self, chan, nWfms, untriggered=False):
