@@ -207,7 +207,7 @@ class TekScopeAbstract(Configurable, AbstractDriver):
             * get(self._yScaleParam) \
             + get('YZERO')
 
-        timeDivision = float(self.getConfigParam('HORIZONTAL:MAIN:SCALE'))
+        timeDivision = float(self.getConfigParam('HORIZONTAL:MAIN:SCALE')) # TODO: `forceHardware=True` was removed, do I want to add it back?
         time = np.linspace(-1, 1, len(voltage)) / 2 * timeDivision * 10
 
         return time, voltage

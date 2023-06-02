@@ -23,6 +23,8 @@ class HP_8157A_VA(VISAInstrumentDriver):
         VISAInstrumentDriver.__init__(self, name=name, address=address, **kwargs)
 
     def startup(self):
+        self.write('CLR')
+        time.sleep(self.safeSleepTime)
         self.on()
 
     def on(self):

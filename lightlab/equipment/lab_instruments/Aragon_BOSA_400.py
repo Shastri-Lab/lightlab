@@ -46,6 +46,18 @@ class Aragon_BOSA_400 (VISAInstrumentDriver):
     MAGIC_TIMEOUT = 30
 
     def __init__(self, name='BOSA 400 OSA', address=None, **kwargs):
+        VISAInstrumentDriver.__init__(self, name=name, address=address, **kwargs)
+        self.interface = visa.ResourceManager().open_resource(address)
+
+    def __del__(self):
+        try:
+            self.interface.close()
+        except Exception as e:
+            logger.warning("Could not close instrument correctly: exception %r", e.message)
+            # TODO: logger not defined, should this be logging?
+
+''' TODO: prinecton version uses the following code, but it is not clear what it does
+    def __init__(self, name='BOSA 400 OSA', address=None, **kwargs):
         """Initializes a fake VISA connection to the OSA.
         """
         kwargs['tempSess'] = kwargs.pop('tempSess', True)
@@ -56,6 +68,7 @@ class Aragon_BOSA_400 (VISAInstrumentDriver):
             if using_prologix:
                 old_startup = self.interface._prologix_rm.startup
                 self.interface._prologix_rm.startup = patch_startup(old_startup)
+'''
 
     def stop(self):
         self.__currApp = str(self.ask('INST:STAT:MODE?'))
@@ -107,7 +120,9 @@ class Aragon_BOSA_400 (VISAInstrumentDriver):
         """ writes and reads data"""
 
         data = ""
-        data = self.query(command)
+        self.write(command)
+        data = self.read()
+        # TODO: princeton version uses `data = self.query(command)` instead of read and write, but I can't find the definition of query in any of the parent classes...
         return data
 
     def application(self, app=None):
@@ -161,7 +176,7 @@ class Aragon_BOSA_400 (VISAInstrumentDriver):
         self.write("FORM ASCII")
         self.write("TRAC?")
         data = self.read_TRACE_ASCII()
-        data = self.query("TRAC?", withTimeout)
+        # data = self.query("TRAC?", withTimeout) # TODO: princeton version adds this line, but withTimeout is not defined... seems like this and the following line are just for debugging?
 #         data = self.query("IDN?")
         return data
 
@@ -227,7 +242,7 @@ class Aragon_BOSA_400 (VISAInstrumentDriver):
         else:
             log.exception("Please choose form 'REAL' or 'ASCII'")
 #         return Spectrum(x, y, inDbm=True)
-        return data
+        return data # TODO: should spectrum be returned instead? I guess the idea is to return data and the user can create a Spectrum from it
 
     def CAParam(self, avgCount='CONT', sMode='HR', noiseZero=False):
         if self.__currApp == 'CA' and avgCount in self.__avg and sMode in self.__sMode:

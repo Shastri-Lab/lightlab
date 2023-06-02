@@ -1,9 +1,9 @@
-''' Implementation of core peak finding algorithm.
+""" Implementation of core peak finding algorithm.
     It is wrapped to be more user-friendly by :meth:`~lightlab.util.data.one_dim.MeasuredFunction.findResonanceFeatures`.
 
     :class:`ResonanceFeature` is a data storage class
     returned by :meth:`~lightlab.util.data.one_dim.MeasuredFunction.findResonanceFeatures`
-'''
+"""
 import matplotlib.pyplot as plt
 import numpy as np
 from lightlab import logger
@@ -12,14 +12,14 @@ from .function_inversion import descend
 
 
 class ResonanceFeature(object):
-    ''' A data holder for resonance features (i.e. peaks or dips)
+    """ A data holder for resonance features (i.e. peaks or dips)
 
         Attributes:
             lam (float): center wavelength
             fwhm (float): full width half maximum -- can be less if the extinction depth is less than half
             amp (float): peak amplitude
             isPeak (float): is it a peak or a dip
-    '''
+    """
 
     def __init__(self, lam, fwhm, amp, isPeak=True):
         self.lam = lam
@@ -27,20 +27,34 @@ class ResonanceFeature(object):
         self.amp = amp
         self.isPeak = isPeak
 
+    def __repr__(self):
+        return "{Class}(λ={lam:.3f}nm, Δλ={fwhm:.3e}nm, ampl.={amp:.3g}, {peak})".format(
+            Class=self.__class__.__qualname__,
+            lam=self.lam,
+            fwhm=self.fwhm,
+            amp=self.amp,
+            peak="Peak" if self.isPeak else "Valley",
+        )
+
     def copy(self):
-        ''' Simple copy so you can modify without side effect
+        """ Simple copy so you can modify without side effect
 
             Returns:
                 ResonanceFeature: new object
-        '''
-        return ResonanceFeature(self.lam.copy(), self.fwhm.copy(), self.amp.copy(), self.isPeak)
+        """
+        return ResonanceFeature(
+            self.lam.copy(), self.fwhm.copy(), self.amp.copy(), self.isPeak
+        )
 
     def __plottingData(self):
-        ''' Gives a polygon represented by 5 points
+        """ Gives a polygon represented by 5 points around the resonance feature
 
             Returns:
                 list[tuple]: 5-element list of (x,y) tuples representing points of a polygon
-        '''
+        """
+        # x is the left edge's x-coordinate
+        # y is the bottom edge's y-coordinate
+
         w = self.fwhm
         x = self.lam - w / 2
         if self.isPeak:

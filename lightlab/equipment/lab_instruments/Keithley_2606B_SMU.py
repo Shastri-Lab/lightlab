@@ -37,7 +37,7 @@ import time
 from lightlab import logger
 
 
-class Keithley_2606B_SMU(VISAInstrumentDriver):
+class Keithley_2606B_SMU_TCP(VISAInstrumentDriver):
     """ Keithley 2606B 4x SMU instrument driver
 
         `Manual: <https://download.tek.com/manual/2606B-901-01B_May_2018_Ref_Man.pdf>`__
@@ -345,6 +345,7 @@ class Keithley_2606B_SMU(VISAInstrumentDriver):
                 self.write("{smuX}.source.output = {on_off}".format(smuX=self.smu_full_string, on_off=1 if newState else 0))
                 time.sleep(0.1)
                 self.query_print("\"output configured\"", expected_talker="output configured")
+                time.sleep(0.1)
                 retVal = self.query_print("{smuX}.source.output".format(smuX=self.smu_full_string))
                 is_on = float(retVal) == 1
                 if bool(newState) == is_on:
