@@ -35,7 +35,7 @@ class EMCORE_microITLA_LS():
 
     #powerRange = np.array([-20, 13])
 
-    def __init__(self, address, serial_number=None, **kwargs):
+    def __init__(self, address, serial_number, **kwargs):
             self.serial_number = serial_number
             self.address = address # address of the RPi server ('europa', 'callisto', or specific IP)
             
