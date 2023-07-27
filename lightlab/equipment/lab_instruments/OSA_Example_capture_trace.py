@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 
 import time
 
-import visa
+import pyvisa as visa
 
 # create logger
 

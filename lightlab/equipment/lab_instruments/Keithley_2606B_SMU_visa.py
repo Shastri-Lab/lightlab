@@ -1,6 +1,6 @@
 from . import VISAInstrumentDriver
 from lightlab.laboratory.instruments import Keithley
-import visa
+import pyvisa as visa
 import numpy as np
 import time
 from lightlab import logger

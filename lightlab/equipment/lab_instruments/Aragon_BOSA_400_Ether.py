@@ -7,7 +7,7 @@ There should only be one driver.
 import socket
 import numpy as np
 from lightlab.util.data import Spectrum
-import visa
+import pyvisa as visa
 import time
 import logging
 import struct
