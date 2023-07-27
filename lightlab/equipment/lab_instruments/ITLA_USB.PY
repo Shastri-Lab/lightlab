@@ -2,6 +2,8 @@
 TODO: I'm not sure this file belongs here; I'm including it while merging from the lab PC.
 The EMCORE ITLAs have their own driver file. This seems to be part of the driver that should run
 on the raspberry pi, and doesn't necessarily need to be included in lightlab. Find a home for this file later.
+
+Do the same as Example_capture_trace.py -> move to new 'example_drviers' folder
 """
 
 

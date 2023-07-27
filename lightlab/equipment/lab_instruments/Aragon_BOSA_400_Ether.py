@@ -59,7 +59,7 @@ class Aragon_BOSA_400_Ether (object):
         try:
             self.interface.close()
         except Exception as e:
-            logger.warning("Could not close instrument correctly: exception %r", e.message)
+            log.warning("Could not close instrument correctly: exception %r", e.message)
             
     def connectLan(self):
         #""" connect the instrument to a LAN """

@@ -53,22 +53,21 @@ class Aragon_BOSA_400 (VISAInstrumentDriver):
         try:
             self.interface.close()
         except Exception as e:
-            logger.warning("Could not close instrument correctly: exception %r", e.message)
-            # TODO: logger not defined, should this be logging?
+            log.warning("Could not close instrument correctly: exception %r", e.message)
 
-''' TODO: prinecton version uses the following code, but it is not clear what it does
-    def __init__(self, name='BOSA 400 OSA', address=None, **kwargs):
-        """Initializes a fake VISA connection to the OSA.
-        """
-        kwargs['tempSess'] = kwargs.pop('tempSess', True)
-        VISAInstrumentDriver.__init__(self, name=name, address=address, **kwargs)
-        self.interface = self._session_object
-        if address:
-            using_prologix = address.startswith('prologix://')
-            if using_prologix:
-                old_startup = self.interface._prologix_rm.startup
-                self.interface._prologix_rm.startup = patch_startup(old_startup)
-'''
+    ''' TODO: prinecton version uses the following code, but it is not clear what it does
+        def __init__(self, name='BOSA 400 OSA', address=None, **kwargs):
+            """Initializes a fake VISA connection to the OSA.
+            """
+            kwargs['tempSess'] = kwargs.pop('tempSess', True)
+            VISAInstrumentDriver.__init__(self, name=name, address=address, **kwargs)
+            self.interface = self._session_object
+            if address:
+                using_prologix = address.startswith('prologix://')
+                if using_prologix:
+                    old_startup = self.interface._prologix_rm.startup
+                    self.interface._prologix_rm.startup = patch_startup(old_startup)
+    '''
 
     def stop(self):
         self.__currApp = str(self.ask('INST:STAT:MODE?'))

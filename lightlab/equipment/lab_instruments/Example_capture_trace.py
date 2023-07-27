@@ -2,6 +2,8 @@
 """
 TODO: I think this file can be removed. Was this the example program provided by the vendor?
 @ZhimuG do you know? -@hughmor
+
+from conversation with Zhimu: move to 'example_drviers' folder
 """
 
 
