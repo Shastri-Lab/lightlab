@@ -23,7 +23,7 @@ for _, modname, _ in pkgutil.walk_packages(path=__path__,  # noqa
                 continue
             if VISAInstrumentDriver in mro:
                 globals()[k] = v
-            if k == 'IMEBuild_SMU': #TODO: not sure if this works how I want, just adding this code without testing while merging
+            if k == 'IMEBuild_SMU' or k == 'Qontrol_Q8i': #TODO: not sure if this works how I want, just adding this code without testing while merging
                 # TODO: make IMEBuild a subclass of VISAInstrumentDriver or make a different XXXInstrumentDriver for this?
                 # TODO: is this also an issue for EMCORE_microITLA_LS? These are both RPi instruments so should have a common interface... Look at ArduinoInstrument, could make an RPiInstrument
                 # TODO: What about TCP version of Keithley 2606B? I think it is a VISA instrument but maybe shouldn't be?
