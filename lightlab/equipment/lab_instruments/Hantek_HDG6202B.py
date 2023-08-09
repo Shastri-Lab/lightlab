@@ -13,7 +13,7 @@ import logging
 # create logger
 log = logging.getLogger(__name__)
 
-class HantekAWG():
+class HantekAWG:
     """Class to control Hantek Arbitrary Waveform Generator"""
     def __init__(self, address, channel):
         """Initialize device at given VISA address"""

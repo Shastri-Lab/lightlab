@@ -13,7 +13,7 @@ e.g. waiting for power stabilization, checking for timeouts and errors, checking
 
 import zmq
 
-class EMCORE_microITLA_LS():
+class EMCORE_microITLA_LS:
     '''
         Single EMCORE microITLA laser source
         Provides array-based and dict-based setters/getters for
