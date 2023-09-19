@@ -15,7 +15,7 @@ pip install -e .
 ```
 4. Run the laser service installation script (this will install the laser service and enable it to run on startup):
 ```
-cd equipment/lab_instruments/itla_msa_modules
+cd lightlab/equipment/lab_instruments/itla_msa_modules
 sudo ./install_laser_service.sh
 ```
 if you run into an issue with the above command, you made need to make the script executable and run the installation again:
