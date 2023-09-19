@@ -18,11 +18,14 @@ pip install -e .
 cd equipment/lab_instruments/itla_msa_modules
 sudo ./install_laser_service.sh
 ```
-if you run into an issue with the above command, you made need to make the script executable and try step 4 again:
+if you run into an issue with the above command, you made need to make the script executable and run the installation again:
 ```
 sudo chmod +x install_laser_service.sh
+sudo ./install_laser_service.sh
 ```
 5. Reboot the raspberry pi:
 ```
 sudo reboot
 ```
+
+Now the server-side code should be installed and running. You can now run the laser code from your experiment as normal!
