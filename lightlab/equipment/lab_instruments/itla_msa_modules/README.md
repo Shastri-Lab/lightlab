@@ -3,7 +3,7 @@
 ```
 ssh pi@<raspberry_pi_ip>
 ```
-2. Clone the lightlab repo into the home directory:
+2. Clone the lightlab repo into the home directory (you will have to have set up git credentials on the server to authenticate into the `lightlab` repo—alternatively, you can download the repo as a zip file and manually upload this to the Raspberry Pi, then unzip it):
 ```
 cd ~
 git clone git@github.com:Shastri-Lab/lightlab.git
