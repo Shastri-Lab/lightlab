@@ -32,6 +32,8 @@ dependencies = [
     'scipy',
     'scikit-learn',
     'dill',
+    'pyzmq',
+    'pyserial',
 ]
 dynamic = ["version"]
 

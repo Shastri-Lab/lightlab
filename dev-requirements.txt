@@ -6,6 +6,8 @@ pyserial==3.4
 python-dateutil==2.6.1
 pytz==2017.3
 pyusb==1.0.2
+pyzmq==25.1.1
+pyserial==3.5
 recommonmark==0.4.0
 texttable==1.4.0
 wheel==0.31.1
