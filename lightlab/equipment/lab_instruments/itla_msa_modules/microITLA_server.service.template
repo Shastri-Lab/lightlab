@@ -1,0 +1,11 @@
+[Unit]
+Description=Server script for communication with the PurePhotonics micro ITLA.
+
+[Service]
+ExecStart=python3 %USER_HOME%/lightlab/lightlab/equipment/lab_instruments/EMCORE_microITLA_LS_server.py
+User=%USERNAME%
+Group=%GROUPNAME%
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
