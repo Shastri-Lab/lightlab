@@ -3,7 +3,8 @@ Description=Server script for communication with the PurePhotonics micro ITLA.
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/python3 ~/lightlab/lightlab/equipment/lab_instruments/EMCORE_microITLA_LS_server.py
+Environment="USER_HOME=$(eval echo ~$SUDO_USER)"
+ExecStart=python3 ${USER_HOME}/lightlab/lightlab/equipment/lab_instruments/EMCORE_microITLA_LS_server.py
 User=pi
 Restart=always
 
