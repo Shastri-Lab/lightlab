@@ -8,6 +8,11 @@ from .EMCORE_microITLA_LS import EMCORE_microITLA_LS
 from .Hantek_HDG6202B import HantekAWG
 from .Keysight_86100D_Oscope import Keysight_86100D_Oscope
 
+# list of instruments to skip all together
+SKIP_INSTRUMENTS = [
+    'EMCORE_microITLA_LS_server',
+]
+
 # This imports all of the modules in this folder
 # As well as all their member classes that are VISAInstrumentDriver
 import importlib
@@ -22,6 +27,8 @@ class BuggyHardware(Exception):
 
 for _, modname, _ in pkgutil.walk_packages(path=__path__,  # noqa
                                            prefix=__name__ + '.'):
+    if modname.split('.')[-1] in SKIP_INSTRUMENTS:
+        continue
     _temp = importlib.import_module(modname)
     for k, v in _temp.__dict__.items():
         if k[0] != '_' and type(v) is not type:
