@@ -28,4 +28,11 @@ sudo chmod +x install_service.sh
 sudo reboot
 ```
 
-Now the server-side code should be installed and running. You can now run the laser code from your experiment as normal!
+Now the server-side code should be installed and running. You can now run the laser code from your experiment as normal! To see the output of the laser service (for example, to see the serial number of all the connected lasers), you can run:
+```
+cat ~/lightlab/lightlab/equipment/lab_instruments/itla_msa_modules/server_stdout.log
+```
+If you connect or disconnect lasers, you will need to restart the laser service for the changes to take effect:
+```
+sudo systemctl restart microITLA_server.service
+```
