@@ -11,7 +11,7 @@ git clone git@github.com:Shastri-Lab/lightlab.git
 3. Install the lightlab package:
 ```
 cd lightlab
-pip install -e .
+pip3 install -e .
 ```
 4. Run the laser service installation script (this will install the laser service and enable it to run on startup):
 ```
