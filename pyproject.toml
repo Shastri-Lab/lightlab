@@ -34,6 +34,7 @@ dependencies = [
     'dill',
     'pyzmq',
     'pyserial',
+    'qontrol==1.1.1',
 ]
 dynamic = ["version"]
 
