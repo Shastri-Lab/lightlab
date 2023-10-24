@@ -24,7 +24,7 @@ class BIP4_lib:
     def BIP4(ReadWriteDec,registerHex,dude):
         def de2bi(d,n):
             power = 2**np.arange(n-1,-1,-1)
-            bits = np.floor((d%(2*power))/power).astype(np.int)
+            bits = np.floor((d%(2*power))/power).astype(int)
             return bits
         
         
@@ -63,7 +63,7 @@ class BIP4_lib:
         
         bip8And0f=bip8 & Byte0f
         bip8Andf0=bip8 & Bytef0
-        bip8Andf0ShiftRight=np.zeros(8).astype(np.int)
+        bip8Andf0ShiftRight=np.zeros(8).astype(int)
         bip4ShiftLeft = np.zeros_like(bip8Andf0ShiftRight)
         bip8Andf0ShiftRight[4::]=bip8Andf0[0:4]
         bip4=bip8And0f ^ bip8Andf0ShiftRight
