@@ -22,6 +22,13 @@ try:
 except:
    raise
 
+# custom print function for basic logging
+from datetime import datetime
+def log_print(*args, **kwargs):
+    # use __builtins__.print to avoid recursion
+    __builtins__.print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]: ", end='')
+    __builtins__.print(*args, **kwargs)
+print = log_print  # Override built-in print
 
 def command_from_name(command_name, laser, *argv):
     ''' Dictionary of commands from command name strings
@@ -233,7 +240,7 @@ def run(socket, attempts=5):
         For now, single port hardcoded --run all connections through here
         DOES NOT CURRENTLY TRACK MULTIPLE USERS
     '''  
-    
+    __builtins__.print('\n') # newline every time server is started
     print("Starting server")
     # Populate laser dictionary
     initialized = 0
