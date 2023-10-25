@@ -329,4 +329,116 @@ class msa:
         ary_command = blib.BIP4(rw, hex_address, int_val)
         bytes_command = bytes([x for x in ary_command])
         return bytes_command
+        
+    def scan_range(int_val, rw):
+        hex_address = 0xe4 #FCF3
+        if rw == False:
+            int_val = 0
+        ary_command = blib.BIP4(rw, hex_address, int_val)
+        bytes_command = bytes([x for x in ary_command])
+        return bytes_command
+        
+    def scan_speed(int_val, rw):
+        hex_address = 0xf1 #FCF3
+        if rw == False:
+            int_val = 0
+        ary_command = blib.BIP4(rw, hex_address, int_val)
+        bytes_command = bytes([x for x in ary_command])
+        return bytes_command
+        
+    def scan_cal(int_val, rw):
+        hex_address = 0xf7 #FCF3
+        if rw == False:
+            int_val = 0
+        ary_command = blib.BIP4(rw, hex_address, int_val)
+        bytes_command = bytes([x for x in ary_command])
+        return bytes_command
+        
+    def clean_mode(int_val, rw):
+        hex_address = 0x90 #FCF3
+        if rw == False:
+            int_val = 0
+        ary_command = blib.BIP4(rw, hex_address, int_val)
+        bytes_command = bytes([x for x in ary_command])
+        return bytes_command
+        
+    def clean_swp(int_val, rw):
+        hex_address = 0xe5 #FCF3
+        if rw == False:
+            int_val = 0
+        ary_command = blib.BIP4(rw, hex_address, int_val)
+        bytes_command = bytes([x for x in ary_command])
+        return bytes_command
+        
+    def read_offset(int_val, rw):
+        hex_address = 0xe6 #FCF3
+        if rw == False:
+            int_val = 0
+        ary_command = blib.BIP4(rw, hex_address, int_val)
+        bytes_command = bytes([x for x in ary_command])
+        return bytes_command
 
+    def cjf1(int_val, rw): #THz
+        hex_address = 0xea #CJF1
+        if rw == False:
+            int_val = 0
+        ary_command = blib.BIP4(rw, hex_address, int_val)
+        bytes_command = bytes([x for x in ary_command])
+        return bytes_command
+    
+    def cjf2(int_val, rw): #10*GHz
+        hex_address = 0xeb #CJF2
+        if rw == False:
+            int_val = 0
+        ary_command = blib.BIP4(rw, hex_address, int_val)
+        bytes_command = bytes([x for x in ary_command])
+        return bytes_command
+        
+    def sled_temp(int_val, rw): #0.01 C
+        hex_address = 0xec
+        if rw == False:
+            int_val = 0
+        ary_command = blib.BIP4(rw, hex_address, int_val)
+        bytes_command = bytes([x for x in ary_command])
+        return bytes_command
+        
+    def drive_current(int_val, rw): #100 uA
+        hex_address = 0xe9
+        if rw == False:
+            int_val = 0
+        ary_command = blib.BIP4(rw, hex_address, int_val)
+        bytes_command = bytes([x for x in ary_command])
+        return bytes_command
+        
+    def clean_jump(int_val, rw): #Initiate clean jump
+        hex_address = 0xed
+        if rw == False:
+            int_val = 0
+        ary_command = blib.BIP4(rw, hex_address, int_val)
+        bytes_command = bytes([x for x in ary_command])
+        bytes_command = bytes([x for x in ary_command])
+        return bytes_command
+        
+    def cj_err(int_val, rw): #Coded as cj_err = (value - 10000)/10 GHz
+        hex_address = 0xe6
+        if rw == False:
+            int_val = 0
+        ary_command = blib.BIP4(rw, hex_address, int_val)
+        bytes_command = bytes([x for x in ary_command])
+        return bytes_command
+        
+    def clean_jump_mitla(int_val, rw): #Clean jump register for micro itla
+        hex_address = 0xd0
+        if rw == False:
+            int_val = 0
+        ary_command = blib.BIP4(rw, hex_address, int_val)
+        bytes_command = bytes([x for x in ary_command])
+        return bytes_command
+        
+    def clean_jump_cal(int_val, rw): #Clean jump calibration register for micro itla
+        hex_address = 0xd2
+        if rw == False:
+            int_val = 0
+        ary_command = blib.BIP4(rw, hex_address, int_val)
+        bytes_command = bytes([x for x in ary_command])
+        return bytes_command
