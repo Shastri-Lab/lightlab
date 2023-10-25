@@ -50,7 +50,7 @@ def read_until(self, terminator=LF, size=None):
     return bytes(line)
 
 serial.Serial.read_until = read_until
-print(serial.Serial.read)
+#print(serial.Serial.read)
 
 class emcore_app:
 
@@ -588,7 +588,6 @@ class emcore_app:
         if self.emcore_iTLA.is_open==False:
             print('port closed. \n')
             return('port closed. \n')
-
 
 
 
