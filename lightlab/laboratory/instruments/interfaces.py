@@ -42,6 +42,10 @@ class Keithley(SourceMeter):
          'getVoltage',
          'measCurrent']
 
+class Multimeter(Instrument):
+    essentialMethods = Instrument.essentialMethods + \
+    ['meas_voltage',
+    'meas_current'] # TODO: rename to standardize
 
 class VectorGenerator(Instrument):
     ''' Todo:
