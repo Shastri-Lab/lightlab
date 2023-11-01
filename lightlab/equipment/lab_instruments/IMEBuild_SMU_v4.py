@@ -112,7 +112,9 @@ def measured_result(rtn):
 # SMU Instrument class
 class IMEBuild_SMU:
 
-    def __init__(self, channel, host=IP_ADDR, port=IP_PORT):
+    # TODO: add instrument category: Keithley? must standardize function names...
+
+    def __init__(self, channel, host=IP_ADDR, port=IP_PORT): # TODO host keyword is a problem; conflicts with host as in Host PC... hostname instead?
         self.host = host
         self.port = port
         self.channel = int(channel)
