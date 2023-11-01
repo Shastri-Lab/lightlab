@@ -41,16 +41,17 @@ class InstrumentSession(_AttrGetter):
 
     _session_object = None
 
-    def reinstantiate_session(self, address, tempSess):
+    def __init__(self, address=None, tempSess=False, baud=None):
+        self.reinstantiate_session(address, tempSess, baud)
+        self.tempSess = tempSess
+        self.address = address
+        self.baud = baud
+
+    def reinstantiate_session(self, address, tempSess, baud):
         if address is not None and address.startswith('prologix://'):
             self._session_object = PrologixGPIBObject(address=address, tempSess=tempSess)
         else:
-            self._session_object = VISAObject(address=address, tempSess=tempSess)
-
-    def __init__(self, address=None, tempSess=False):
-        self.reinstantiate_session(address, tempSess)
-        self.tempSess = tempSess
-        self.address = address
+            self._session_object = VISAObject(address=address, tempSess=tempSess, baud=baud)
 
     def open(self):
         return self._session_object.open()
