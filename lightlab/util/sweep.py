@@ -932,7 +932,8 @@ class CommandControlSweeper(Sweeper):
         monitMat = self.data[..., monitorInds] if len(monitorInds) > 0 else None
         return (cmdMat, measMat, monitMat)
 
-    def plot(self, index=None, axArr=None):
+    def plot(self, index=None, axArr=None, line_col=None):
+        line_col = 'k' or line_col
         plType = self.plotOptions['plType']
         assertValidPlotType(plType, self.swpDims, type(self))
 
@@ -968,7 +969,7 @@ class CommandControlSweeper(Sweeper):
             stddevs = np.std(allPts, axis=0)
 
             # Plot dots
-            plt.plot(xFull, allPts.T, 'k.')
+            plt.plot(xFull, allPts.T, f'{line_col}.')
             # Plot means
             plt.plot(xFull, means, 'r', lw=2)
             # Plot error bars
@@ -987,7 +988,7 @@ class CommandControlSweeper(Sweeper):
             plt.ylim(minMaxCmd)
             plt.xlabel('Command value')
             plt.ylabel('Evaluated value')
-            plt.plot(minMaxCmd, minMaxCmd, '--k')
+            plt.plot(minMaxCmd, minMaxCmd, f'--{line_col}')
 
     def score(self, bits=False, worstCase=False):
         ''' Takes full sweep data and returns the worst-case accuracy and precision
