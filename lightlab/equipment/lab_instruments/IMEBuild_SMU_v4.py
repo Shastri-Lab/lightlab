@@ -24,7 +24,7 @@ def zmq_connected(ip_addr, ip_port):
         yield connected_socket
 
 # send command and return the controller's response
-def command(cmd, ip_addr=IP_ADDR, ip_port=IP_PORT):
+def command(cmd, ip_addr=IP_ADDR, ip_port=IP_PORT, print_out=False):
     with zmq_connected(ip_addr, ip_port) as socket:
         #write command 
         socket.send(cmd.encode())
@@ -35,18 +35,19 @@ def command(cmd, ip_addr=IP_ADDR, ip_port=IP_PORT):
             raise RuntimeError(response)
         response = response[1:-1]
 
-        for line in response:
-            print(line)
+        if print_out:
+            for line in response:
+                print(line)
 
         return response
 
 # send multiple commands and return the controller's response
-def commands(cmds, ip_addr=IP_ADDR, ip_port=IP_PORT):
+def commands(cmds, ip_addr=IP_ADDR, ip_port=IP_PORT, print_out=False):
     if (isinstance(cmds, str)):
         cmds = [cmds]
     rtns = []
     for cmd in cmds:
-        rtn = command(cmd, ip_addr, ip_port)
+        rtn = command(cmd, ip_addr, ip_port, print_out=print_out)
         rtns.append(rtn)
     return rtns
 
@@ -119,36 +120,36 @@ class IMEBuild_SMU:
         self.port = port
         self.channel = int(channel)
 
-    def set_voltage(self, voltage):
+    def set_voltage(self, voltage, print_out=False):
         cmd = set_voltage(self.channel, voltage)
-        return command(cmd, self.host, self.port)
+        return command(cmd, self.host, self.port, print_out=print_out)
 
-    def set_current(self, current_ma):
+    def set_current(self, current_ma, print_out=False):
         cmd = set_current(self.channel, current_ma)
-        return command(cmd, self.host, self.port)
+        return command(cmd, self.host, self.port, print_out=print_out)
 
-    def set_config_mode(self, mode):
+    def set_config_mode(self, mode, print_out=True):
         if mode not in ALLOWED_MODES:
             raise RuntimeError(f"Invalid config mode. Expected one of {ALLOWED_MODES} but got {mode} instead.")
         cmd = set_config_mode(self.channel, mode)
-        return command(cmd, self.host, self.port)
+        return command(cmd, self.host, self.port, print_out=print_out)
 
-    def enable_output(self):
+    def enable_output(self, print_out=True):
         cmd = set_enable(self.channel, True)
-        return command(cmd, self.host, self.port)
+        return command(cmd, self.host, self.port, print_out=print_out)
 
-    def disable_output(self):
+    def disable_output(self, print_out=True):
         cmd = set_enable(self.channel, False)
-        return command(cmd, self.host, self.port)
+        return command(cmd, self.host, self.port, print_out=print_out)
 
-    def measure_voltage(self):
+    def measure_voltage(self, print_out=False):
         cmd = measure(self.channel, MEAS_V)
-        return measured_result(command(cmd, self.host, self.port))
+        return measured_result(command(cmd, self.host, self.port, print_out=print_out))
 
-    def measure_current(self):
+    def measure_current(self, print_out=False):
         cmd = measure(self.channel, MEAS_I)
-        return measured_result(command(cmd, self.host, self.port))
+        return measured_result(command(cmd, self.host, self.port, print_out=print_out))
     
-    def reset(self):
+    def reset(self, print_out=True):
         cmd = reset_ch(self.channel)
-        return command(cmd, self.host, self.port)
+        return command(cmd, self.host, self.port, print_out=print_out)
