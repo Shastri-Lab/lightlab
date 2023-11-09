@@ -4,7 +4,7 @@ import time
 import re
 from lightlab import visalogger as logger
 from .driver_base import InstrumentSessionBase, TCPSocketConnection
-
+import serial
 
 class PrologixResourceManager(TCPSocketConnection):
     '''Controls a Prologix GPIB-ETHERNET Controller v1.2
@@ -166,7 +166,6 @@ def _sanitize_address(address):
     else:
         raise RuntimeError('invalid address: {}'.format(address))
     return ip_address, gpib_pad, gpib_sad
-
 
 class PrologixGPIBObject(InstrumentSessionBase):
 
@@ -351,3 +350,174 @@ class PrologixGPIBObject(InstrumentSessionBase):
         if newTimeout < 0:
             raise ValueError("Timeouts cannot be negative")
         self.__timeout = newTimeout
+
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+'''
+Instrument wrapper module
+
+Author: Daniel Stadelmann, Tobias Badertscher
+'''
+
+
+
+class PrologixGPIB_USBObject(InstrumentSessionBase):
+    '''
+    Class for instruments connected via prologix USB-GPIB adapter
+    '''
+    serFd = None
+    lineEnd="\n"
+
+    def __init__(self, address, tempSess=False, baud_rate=921600, silent=True):
+        
+        split_address = address.split('::')
+        print(split_address)
+        unsan_serial_port = split_address[split_address.index('INSTR')-2]
+        comPort=unsan_serial_port.replace('ASRL','COM')    
+        #comPort = 'COM3'#split_address[1]
+        #comPort = int(comPort[4:])-1
+        self.address = address
+        self._silent=silent
+        self.gpibAddr = int(split_address[split_address.index('INSTR')-1])
+        self.__timeout = 2  # 2 seconds is the default
+
+        if PrologixGPIB_USBObject.serFd==None:
+            PrologixGPIB_USBObject.serFd=serial.Serial(comPort, baudrate=baud_rate, timeout=self.__timeout)
+            fullcmd = "++mode 1"+self.lineEnd
+            bfullcmd = fullcmd.encode()
+            PrologixGPIB_USBObject.serFd.write(bfullcmd )
+            fullcmd = "++ifc"+PrologixGPIB_USBObject.lineEnd
+            bfullcmd = fullcmd.encode()
+            PrologixGPIB_USBObject.serFd.write(bfullcmd)
+            fullcmd = "++auto 0"+PrologixGPIB_USBObject.lineEnd
+            bfullcmd = fullcmd.encode()
+            PrologixGPIB_USBObject.serFd.write(bfullcmd)
+            #serialInterface.serFd.write("++auto 1"+serialInterface.lineEnd )
+            fullcmd = "++read_tmo_ms 200"+PrologixGPIB_USBObject.lineEnd
+            bfullcmd = fullcmd.encode()
+            PrologixGPIB_USBObject.serFd.write(bfullcmd )
+            #ver = tuple(( int(i) for i in self.query('++ver').split()[-1].split('.')))
+            #if ver != (6, 107):
+            #    raise(RuntimeError("Prologix is of version: %d.%d\n Please Update." % ver))
+
+    def ask(self, cmd):
+        return self.query(cmd)
+
+    def query(self,cmd):
+        fullcmd = '++addr %d' %self.gpibAddr+PrologixGPIB_USBObject.lineEnd
+        bfullcmd = fullcmd.encode()
+        PrologixGPIB_USBObject.serFd.write(bfullcmd)
+        if isinstance(cmd,list):
+            for i in cmd:
+                if not self._silent:
+                    print("Command: \'%s\'" % cmd)
+                fullcmd = i+PrologixGPIB_USBObject.lineEnd
+                bfullcmd = fullcmd.encode()
+                PrologixGPIB_USBObject.serFd.write(bfullcmd)
+        else:
+            if not self._silent:
+                print("Command: \'%s\'" % cmd)
+            fullcmd = cmd+PrologixGPIB_USBObject.lineEnd
+            bfullcmd = fullcmd.encode()
+            PrologixGPIB_USBObject.serFd.write(bfullcmd)
+        #serialInterface.serFd.write("++read eoi"+serialInterface.lineEnd)
+        fullcmd = "++read"+PrologixGPIB_USBObject.lineEnd
+        bfullcmd = fullcmd.encode()
+        PrologixGPIB_USBObject.serFd.write(bfullcmd)
+        retry=1
+        while retry>0:
+            res=PrologixGPIB_USBObject.serFd.readlines()
+            if len(res)>0:
+                if not self._silent:
+                    print("Obtained result:")
+                retry=0
+                if res[0][0]=='#':
+                    sizeLen=int(res[0][1])
+                    binSize=int(res[0][2:2+sizeLen])
+                    oRes=res[0][2+sizeLen:]+res[1]+res[2][0:-1]
+                    if binSize!=len(oRes):
+                        oRes=None
+                    res=oRes
+                    if not self._silent:
+                        print("Obtained binary data of size %d" % binSize)  
+                else:
+                    res=[i.decode().strip('\n\r') for i in res]     
+                if not self._silent:
+                    if len(str(res))<100:
+                        print(res)
+                    else:
+                        print("Obtained large chunk of data of length %d" % len(res))
+            retry-=1
+        if not isinstance(cmd,list):
+            res = res[0]
+        return res
+
+    def write(self,cmd):
+        fullcmd = '++addr %d' %self.gpibAddr+PrologixGPIB_USBObject.lineEnd
+        bfullcmd = fullcmd.encode()
+        PrologixGPIB_USBObject.serFd.write(bfullcmd)
+        if isinstance(cmd,list):
+            for i in cmd:
+                if  not self._silent:
+                    print("Command: \"%s\"" % cmd)
+                fullcmd = i+PrologixGPIB_USBObject.lineEnd
+                bfullcmd = fullcmd.encode()
+                PrologixGPIB_USBObject.serFd.write(bfullcmd)
+        else:
+            fullcmd = cmd+PrologixGPIB_USBObject.lineEnd
+            bfullcmd = fullcmd.encode()
+            PrologixGPIB_USBObject.serFd.write(bfullcmd)
+            if not self._silent:
+                print("Command: \"%s\"" % cmd)
+        return 
+
+    def LLO(self):
+        '''This command disables front panel operation of the currently addressed instrument.'''
+        self.write('++llo')
+
+    def LOC(self):
+        '''This command enables front panel operation of the currently addressed instrument.'''
+        self.write('++loc')
+
+    def clear(self):
+        '''This command sends the Selected Device Clear (SDC) message to the currently specified GPIB address.'''
+        self.write('++addr {}'.format(self.gpibAddr))
+        self.write('++clr')
+
+    def open(self):
+        raise NotImplementedError
+
+    def close(self):
+        raise NotImplementedError
+
+
+    def startup(self):
+        raise NotImplementedError
+        
+    def query_raw_binary(self, queryStr):
+        raise NotImplementedError
+        
+    def spoll(self):
+        '''Return status byte of the instrument.'''
+
+        spoll = self.write('++spoll {}'.format(self.gpibAddr))
+        status_byte = int(spoll.rstrip())
+        return status_byte
+
+    @property
+    def timeout(self):
+        ''' This timeout is between the user and the instrument.
+            For example, if we did a sweep that should take ~10 seconds
+            but ends up taking longer, you can set the timeout to 20 seconds.
+        '''
+        return self.__timeout
+
+    @timeout.setter
+    def timeout(self, newTimeout):
+        if newTimeout < 0:
+            raise ValueError("Timeouts cannot be negative")
+        self.__timeout = newTimeout
+
+    def wait(self):
+        self.query('*OPC?')

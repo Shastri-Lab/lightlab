@@ -2,7 +2,7 @@ from lightlab import visalogger
 import inspect
 
 from .driver_base import InstrumentSessionBase
-from .prologix_gpib import PrologixGPIBObject
+from .prologix_gpib import PrologixGPIBObject, PrologixGPIB_USBObject
 from .visa_object import VISAObject
 
 
@@ -25,13 +25,17 @@ _InstrumentSessionBase_methods = list(name for name, _ in inspect.getmembers(
 class InstrumentSession(_AttrGetter):
     ''' This class is the interface between the higher levels of lightlab instruments
     and the driver controlling the GPIB line. Its methods are specialized into
-    either PrologixGPIBObject or VISAObject.
+    either PrologixGPIBObject, PrologixGPIB_USBObject or VISAObject.
 
     This was mainly done because the Prologix GPIB Ethernet controller
-    is not VISA compatible and does not provide a VISA interface.
+    is not VISA compatible and does not provide a VISA interface. The Prologix GPIB USB
+    controller is also not VISA compatible.
 
-    If the address starts with 'prologix://', it will use PrologixGPIBObject's methods,
-    otherwise it will use VISAObject's methods (relying on pyvisa).
+    If the address starts with 'prologix://', this implies the prologix GPIB Ethernet
+    controller is being used and it will use PrologixGPIBObject's methods.
+    If the address starts with 'PROLOGIX::', this implies the prologix GPIB USB
+    controller is being used and it will use the PrologixGPIB_USBObject methods.
+    Otherwise it will use VISAObject's methods (relying on pyvisa).
 
     .. warning:: Since this is a wrapper class to either :py:class:`PrologixGPIBObject`
     or :py:class:`VISAObject`, avoid using super() in overloaded methods.
@@ -42,8 +46,11 @@ class InstrumentSession(_AttrGetter):
     _session_object = None
 
     def reinstantiate_session(self, address, tempSess):
+        print(address)
         if address is not None and address.startswith('prologix://'):
             self._session_object = PrologixGPIBObject(address=address, tempSess=tempSess)
+        elif address is not None and address.startswith('PROLOGIX::'):
+            self._session_object = PrologixGPIB_USBObject(address=address, tempSess=tempSess)
         else:
             self._session_object = VISAObject(address=address, tempSess=tempSess)
 
