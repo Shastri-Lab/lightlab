@@ -10,6 +10,7 @@ data/*
 
 # Sketchpad
 notebooks/sketchpad/*
+tests/test_qontrol.py
 
 # Monitoring dynamic information
 progress-monitor/*

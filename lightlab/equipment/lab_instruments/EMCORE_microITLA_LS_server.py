@@ -22,6 +22,13 @@ try:
 except:
    raise
 
+# custom print function for basic logging
+from datetime import datetime
+def log_print(*args, **kwargs):
+    # use __builtins__.print to avoid recursion
+    __builtins__.print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]: ", end='')
+    __builtins__.print(*args, **kwargs)
+print = log_print  # Override built-in print
 
 def command_from_name(command_name, laser, *argv):
     ''' Dictionary of commands from command name strings
@@ -191,7 +198,7 @@ def identify_all(COMS):
             laser_id_obj = laser_id('empty', port)
             laser_id_obj.set_handle()
             # Get its serial_number
-            laser_id_obj.serial_number = laser_id_obj.handle.get_serial_number()
+            laser_id_obj.serial_number = laser_id_obj.handle.get_serial_number().rstrip("\x00") # stripping null bytes; probably better handled from the emcore_app, but this works
             iddict[laser_id_obj.serial_number] = laser_id_obj
         except:
             print('COM Port ' + port + ' failed, moving on')
@@ -215,7 +222,7 @@ def identify_single(port, COMS, attempts=1):
         laser_id_obj = laser_id('empty', port)
         try:
             laser_id_obj.set_handle()
-            laser_id_obj.serial_number = laser_id_obj.handle.get_serial_number()
+            laser_id_obj.serial_number = laser_id_obj.handle.get_serial_number().rstrip("\x00") # stripping null bytes; probably better handled from the emcore_app, but this works
             # Clear this port
             COMS.remove_unassigned_port(port)
             COMS.add_port(port)
@@ -233,7 +240,7 @@ def run(socket, attempts=5):
         For now, single port hardcoded --run all connections through here
         DOES NOT CURRENTLY TRACK MULTIPLE USERS
     '''  
-    
+    __builtins__.print('\n') # newline every time server is started
     print("Starting server")
     # Populate laser dictionary
     initialized = 0

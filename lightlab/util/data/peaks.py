@@ -169,6 +169,7 @@ def findPeaks(
             logger.debug("-Left side")
             indL, validL = descend(yArr, blanked, indOfMax - sepInds, "left", absThresh)
             logger.debug("-Right side")
+            #TODO: this bugs out when there is a peak right at the right edge of the array (cant go further)
             indR, validR = descend(
                 yArr, blanked, indOfMax + sepInds, "right", absThresh
             )

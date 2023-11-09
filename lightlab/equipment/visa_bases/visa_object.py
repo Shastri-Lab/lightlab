@@ -30,8 +30,9 @@ class VISAObject(InstrumentSessionBase):
     _open_retries = 0
     _termination = CR + LF
     __timeout = None
+    _ID_STR = '*IDN?'
 
-    def __init__(self, address=None, tempSess=False):
+    def __init__(self, address=None, tempSess=False, baud=None, ID_STR=None):
         '''
             Args:
                 tempSess (bool): If True, the session is opened and closed every time there is a command
@@ -43,6 +44,9 @@ class VISAObject(InstrumentSessionBase):
         self.address = address
         self._open_retries = 0
         self.__timeout = None
+        self._baud = baud
+        if ID_STR is not None:
+            self._ID_STR = ID_STR
 
     def open(self):
         '''
@@ -57,6 +61,8 @@ class VISAObject(InstrumentSessionBase):
         try:
             self.mbSession = self.resMan.open_resource(self.address)
             self.mbSession.write_termination = self.termination
+            if self._baud is not None:
+                self.mbSession.baud_rate = self._baud
             if not self.tempSess:
                 logger.debug('Opened %s', self.address)
         except pyvisa.VisaIOError as err:
@@ -135,7 +141,7 @@ class VISAObject(InstrumentSessionBase):
 
     def instrID(self):
         r"""Returns the \*IDN? string"""
-        return self.query('*IDN?')
+        return self.query(self._ID_STR)
 
     @property
     def timeout(self):

@@ -60,7 +60,10 @@ class Aragon_BOSA_400_Ether (object):
             self.interface.close()
         except Exception as e:
             log.warning("Could not close instrument correctly: exception %r", e.message)
-            
+    
+    def close(self):
+        self.__del__()
+
     def connectLan(self):
         #""" connect the instrument to a LAN """
         log.debug("creating socket")
@@ -113,7 +116,7 @@ class Aragon_BOSA_400_Ether (object):
         WithReturn=str(self.ask('INST:STAT:MODE?'))
         self.__currApp = WithReturn[:-2]
         print('Current application is ' + self.__currApp + '.')
-        print('Please choose application from["BOSA", "TLS", "CA", "MAIN"]')
+        print('Please choose application from ["BOSA", "TLS", "CA", "MAIN"]')
 
     def write(self, command=None):
         if command is not None:
@@ -138,23 +141,22 @@ class Aragon_BOSA_400_Ether (object):
                 raise e
             if("\n" in message):
                 break
-            log.debug("All data readed!")
+            log.debug("All data read!")
         log.debug("Data received: " + message)
         return message
     
-    def readnoend(self):
+    def readnoend(self): # TODO: this function could be cleaned up with previous one to remove duplication
         message = ""
         log.debug("Reading data using LAN interface...")
         try:
             data = self.interface.recv(19200)
             message += data.decode()
-                         
         except Exception as e:
             log.exception("Could not read data")
             print(e)
             raise e
 
-        log.debug("All data readed!")
+        log.debug("All data read!")
         log.debug("Data received: " + message)
         return message
         
@@ -195,12 +197,14 @@ class Aragon_BOSA_400_Ether (object):
                 log.exception("Could not choose the application")
                 print(e)
                 raise e
+        else:
+            log.exception(f"`app` should be one of {self.__apps}")
 
     def getWLrangeFromHardware(self):
-        theRange = [0] * 2
-        theRange[0] = float(self.ask("SENS:WAV:STOP?"))
-        theRange[1] = float(self.ask("SENS:WAV:STAR?"))
-        return theRange
+        return (
+            float(self.ask("SENS:WAV:STOP?")),
+            float(self.ask("SENS:WAV:STAR?"))
+        )
 
     @property
     def wlRange(self):
@@ -214,13 +218,13 @@ class Aragon_BOSA_400_Ether (object):
         if np.any(newRange != newRangeClipped):
             print('Warning: Requested OSA wlRange out of range. Got', newRange)
         self.write("SENS:WAV:STAR " + str(np.min(newRangeClipped)) + " NM")
-        confirm=self.read()
-        if confirm!='OK\r\n':
+        confirm = self.read()
+        if confirm != 'OK\r\n': # TODO: change this to log message
             print('error')
             print(confirm)
         self.write("SENS:WAV:STOP " + str(np.max(newRangeClipped)) + " NM")
-        confirm=self.read()
-        if confirm!='OK\r\n':
+        confirm = self.read()
+        if confirm != 'OK\r\n':
             print('error')
             print(confirm)
         self.__wlRange = self.getWLrangeFromHardware()
@@ -316,8 +320,6 @@ class Aragon_BOSA_400_Ether (object):
         log.debug("Data Converted" )
         return Trace
         
-
-        
     def spectrum(self, form='ASCII'):
         x=list()
         y=list()
@@ -337,9 +339,29 @@ class Aragon_BOSA_400_Ether (object):
         return Spectrum(x, y, inDbm=True)
 
     def CAParam(self, avgCount='CONT', sMode='HR', noiseZero=False):
+        if type(avgCount) is int:
+            avgCount = str(avgCount)
+        if type(avgCount) is not str:
+            log.exception("avgCount must be a string or int")
+            raise TypeError("avgCount must be a string or int")
+        if avgCount not in self.__avg:
+            avgCount = 'CONT'
+            log.exception(f"\nFor average count, please choose from {self.__avg}. Using CONT.\n")
+        
+        if type(sMode) is not str:
+            log.exception("sMode must be a string")
+            raise TypeError("sMode must be a string")
+        if sMode not in self.__sMode:
+            sMode = 'HR'
+            log.exception(f"\nFor speed(?) mode, please choose from {self.__sMode}. Using HR.\n")
+
+        if type(noiseZero) is not bool:
+            log.exception("noiseZero must be a bool")
+            raise TypeError("noiseZero must be a bool")
+
         if self.__currApp == 'CA' and avgCount in self.__avg and sMode in self.__sMode:
             try:
-                self.write('SENS:AVER:COUN '+avgCount)
+                self.write('SENS:AVER:COUN ' + avgCount)
                 confirm=self.read()
                 if confirm!='OK\r\n':
                     print('error')
@@ -349,7 +371,7 @@ class Aragon_BOSA_400_Ether (object):
                 if confirm!='OK\r\n':
                     print('error')
                     print(confirm)
-                self.write('SENS:WAV:SMOD '+sMode)
+                self.write('SENS:WAV:SMOD ' + sMode)
                 confirm=self.read()
                 if confirm!='OK\r\n':
                     print('error')

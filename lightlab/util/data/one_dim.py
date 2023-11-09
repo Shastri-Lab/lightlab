@@ -477,7 +477,7 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
         if windowWidth is None:
             windowWidth = (max(self.absc) - min(self.absc)) / 10
         dx = abs(np.diff(self.absc[0:2])[0])
-        windPts = np.int(windowWidth / dx)
+        windPts = int(windowWidth / dx)
         if windPts % 2 == 0:  # Make sure windPts is odd so that basis doesn't shift
             windPts += 1
         if windPts >= np.size(self.ordi):
