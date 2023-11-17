@@ -369,12 +369,13 @@ class PrologixGPIB_USBObject(InstrumentSessionBase):
     serFd = None
     lineEnd="\n"
 
-    def __init__(self, address, tempSess=False, baud_rate=921600, silent=True):
+    def __init__(self, address, tempSess=False, baud_rate=9600, silent=True):
         
         split_address = address.split('::')
         print(split_address)
         unsan_serial_port = split_address[split_address.index('INSTR')-2]
-        comPort=unsan_serial_port.replace('ASRL','COM')    
+        #comPort=unsan_serial_port.replace('ASRL','COM')  
+        comPort = unsan_serial_port
         #comPort = 'COM3'#split_address[1]
         #comPort = int(comPort[4:])-1
         self.address = address
@@ -383,7 +384,8 @@ class PrologixGPIB_USBObject(InstrumentSessionBase):
         self.__timeout = 2  # 2 seconds is the default
 
         if PrologixGPIB_USBObject.serFd==None:
-            PrologixGPIB_USBObject.serFd=serial.Serial(comPort, baudrate=baud_rate, timeout=self.__timeout)
+            #PrologixGPIB_USBObject.serFd=serial.Serial(comPort, baudrate=baud_rate, timeout=self.__timeout)
+            PrologixGPIB_USBObject.serFd=serial.serial_for_url(comPort, baudrate=baud_rate, timeout=self.__timeout)
             fullcmd = "++mode 1"+self.lineEnd
             bfullcmd = fullcmd.encode()
             PrologixGPIB_USBObject.serFd.write(bfullcmd )
