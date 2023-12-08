@@ -121,6 +121,23 @@ class IMEBuild_SMU:
         self.channel = int(channel)
         self.mode = self.get_config_mode()
 
+    @property
+    def mode(self):
+        return self._mode
+    
+    @mode.setter
+    def mode(self, value):
+        if value[0] == '0':
+            self._mode = RANGE_5V_UNI
+        elif value[0] == '2':
+            self._mode = RANGE_5V_BIP
+        elif value[0] == '8':
+            self._mode = RANGE_20mA_UNI
+        elif value[0] == '11':
+            self._mode = RANGE_20mA_BIP
+        else:
+            raise RuntimeError(f"Unknown mode returned from SMU: {value}")
+
     def set_voltage(self, voltage, print_out=False):
         cmd = set_voltage(self.channel, voltage)
         return command(cmd, self.host, self.port, print_out=print_out)
