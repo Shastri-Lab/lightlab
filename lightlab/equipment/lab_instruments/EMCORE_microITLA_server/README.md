@@ -1,7 +1,7 @@
 # PurePhotonics Laser Guide
 
 ## Overview
-The lasers from PurePhotonics are USB devices that are run using a Raspberry Pi as a host computer. The lightlab driver `lightlab.equipment.lab_instruments.EMCORE_microITLA_LS` is the main driver that users should interact with to control the lasers. All the Raspberry Pis are set up to automatically run the server script `lightlab.equipment.lab_instruments.EMCORE_microITLA_LS_server` as a Linux service that runs on boot; this script interfaces with all the laser modules connected via USB and handles communication with the user's commands sent using the main lightlab driver. 
+The lasers from PurePhotonics are USB devices that are run using a Raspberry Pi as a host computer. The lightlab driver `lightlab.equipment.lab_instruments.EMCORE_microITLA_LS` is the main driver that users should interact with to control the lasers. All the Raspberry Pis are set up to automatically run the server script `lightlab/equipment/lab_instruments/EMCORE_microITLA_LS_server/EMCORE_microITLA_LS_server.py` as a Linux service that executes when the Pi boots up; this script interfaces with all the laser modules connected via USB and handles communication with the user's commands sent using the main lightlab driver. 
 
 ### Driver Instructions
 For day to day use, you should not need to interact with the Raspberry Pi. You need only use the driver commands in your experiment's Jupyter Notebook. An example of the basic functionality of the lasers is shown in the following snippet:
@@ -33,7 +33,7 @@ laser.itla_off()
 
 If you are having connection issues or if you are plugging in a new laser, you may need to SSH into the Raspberry Pi controlling your laser. You can see the log file of the server script using
 ```
-cat ~/lightlab/lightlab/equipment/lab_instruments/itla_msa_modules/server_stdout.log
+cat ~/lightlab/lightlab/equipment/lab_instruments/EMCORE_microITLA_LS_server/server_stdout.log
 ```
 which will show the log of the commands received from the various clients using lasers on this Pi. Any time the server is reloaded and the script reboots, the log file will show the list of the serial numbers of lasers that are successfully connected. If you need to reboot the server script manually, this can be done using
 ```
@@ -63,7 +63,7 @@ pip3 install -e .
 ```
 4. Run the laser service installation script (this will install the laser service and enable it to run on startup):
 ```
-cd lightlab/equipment/lab_instruments/itla_msa_modules
+cd lightlab/equipment/lab_instruments/EMCORE_microITLA_LS_server
 ./install_service.sh
 ```
 if you run into an issue with the above command, you made need to make the script executable and run the installation again:
@@ -78,7 +78,7 @@ sudo reboot
 
 Now the server-side code should be installed and running. You can now run the laser code from your experiment as normal! To see the output of the laser service (for example, to see the serial number of all the connected lasers), you can run:
 ```
-cat ~/lightlab/lightlab/equipment/lab_instruments/itla_msa_modules/server_stdout.log
+cat ~/lightlab/lightlab/equipment/lab_instruments/EMCORE_microITLA_LS_server/server_stdout.log
 ```
 If you connect or disconnect lasers, you will need to restart the laser service for the changes to take effect:
 ```
