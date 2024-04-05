@@ -15,7 +15,7 @@ __status__ = "developping"
 
 
 try:
-    from itla_msa_modules.itla_msa import msa
+    from EMCORE_microITLA_server.itla_msa import msa
     import serial    
     import struct
     import numpy as np
