@@ -318,7 +318,7 @@ if __name__ == '__main__':
     # Setup server
     context = zmq.Context()
     socket = context.socket(zmq.REP)
-    socket.bind("tcp://*:5555")
+    socket.bind("tcp://*:5556")
     # Run server
     run(socket)
     # Clean exit
