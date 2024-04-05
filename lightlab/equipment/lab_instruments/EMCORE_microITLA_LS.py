@@ -51,7 +51,7 @@ class EMCORE_microITLA_LS:
         # Establish connection
         context = zmq.Context()
         socket = context.socket(zmq.REQ)
-        socket.connect("tcp://{0}:5555".format(self.address))
+        socket.connect("tcp://{0}:5556".format(self.address))
         
         try:
             # Encrypt the serialnumber/command/arguments pair in a single string
