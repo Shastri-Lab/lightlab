@@ -16,7 +16,7 @@ __status__ = "developping"
 
 try:
    #from bip_4 import BIP4_lib as blib
-   from EMCORE_microITLA_server.bip_4 import BIP4_lib as blib
+   from bip_4 import BIP4_lib as blib
 except:
    raise
 
