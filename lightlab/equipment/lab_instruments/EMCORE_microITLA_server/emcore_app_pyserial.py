@@ -20,7 +20,13 @@ try:
     import struct
     import numpy as np
 except:
-   raise
+   try:
+       from itla_msa import msa
+       import serial    
+       import struct
+       import numpy as np
+   except:
+       raise
    
 from serial.serialutil import LF, Timeout
 def read_until(self, terminator=LF, size=None):

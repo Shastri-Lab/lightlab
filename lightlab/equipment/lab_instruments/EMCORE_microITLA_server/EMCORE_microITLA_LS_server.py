@@ -14,6 +14,9 @@ Make sure PYTHONPATH points to folder containing itla_msa_modules
 import time
 import zmq
 
+#windows compatibility
+from sys import platform
+
 # NEC
 try:
     from serial.tools.list_ports import comports
@@ -112,6 +115,8 @@ class COM_manager():
         '''  
         def Filter(string, substr):
             return [str for str in string if any(sub in str for sub in substr)] 
+        if platform == 'win32':
+            return [x[0] for x in comports()]
         return Filter([x[0] for x in comports()],["USB", "usb"])
     
     def remove_port(self, port):
