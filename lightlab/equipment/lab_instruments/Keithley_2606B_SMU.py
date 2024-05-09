@@ -94,10 +94,10 @@ class Keithley_2606B_SMU_TCP(VISAInstrumentDriver):
 
         visa_kwargs["tempSess"] = visa_kwargs.pop("tempSess", True)
         VISAInstrumentDriver.__init__(self, name=name, address=address, **visa_kwargs)
-        self.reinstantiate_session(address, visa_kwargs["tempSess"])
+        self.reinstantiate_session_TCP(address, visa_kwargs["tempSess"])
 
     # BEGIN TCPSOCKET METHODS
-    def reinstantiate_session(self, address, tempSess):
+    def reinstantiate_session_TCP(self, address, tempSess):
         if address is not None:
             # should be something like ['TCPIP0', 'xxx.xxx.xxx.xxx', '6501', 'SOCKET']
             address_array = address.split("::")
