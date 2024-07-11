@@ -32,7 +32,7 @@ class VISAObject(InstrumentSessionBase):
     __timeout = None
     _ID_STR = '*IDN?'
 
-    def __init__(self, address=None, tempSess=False, baud=None, ID_STR=None):
+    def __init__(self, address=None, tempSess=False, baud=None, ID_STR=None, write_termination=None, read_termination=None, data_bits=None, stop_bits=None, parity=None, timeout=None):
         '''
             Args:
                 tempSess (bool): If True, the session is opened and closed every time there is a command
@@ -43,8 +43,15 @@ class VISAObject(InstrumentSessionBase):
         self.mbSession = None
         self.address = address
         self._open_retries = 0
-        self.__timeout = None
+        self.__timeout = timeout
         self._baud = baud
+        self.termination = write_termination
+
+        self._read_term = read_termination
+        self._data_bits = data_bits
+        self._stop_bits = stop_bits
+        self._parity = parity
+
         if ID_STR is not None:
             self._ID_STR = ID_STR
 
@@ -63,6 +70,14 @@ class VISAObject(InstrumentSessionBase):
             self.mbSession.write_termination = self.termination
             if self._baud is not None:
                 self.mbSession.baud_rate = self._baud
+            if self._read_term is not None:
+                self.mbSession.read_termination = self._read_term
+            if self._data_bits is not None:
+                self.mbSession.data_bits = self._data_bits
+            if self._stop_bits is not None:
+                self.mbSession.stop_bits = self._stop_bits
+            if self._parity is not None:
+                self.mbSession.parity = self._parity
             if not self.tempSess:
                 logger.debug('Opened %s', self.address)
         except pyvisa.VisaIOError as err:

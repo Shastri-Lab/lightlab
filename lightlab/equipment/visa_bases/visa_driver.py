@@ -41,17 +41,22 @@ class InstrumentSession(_AttrGetter):
 
     _session_object = None
 
-    def __init__(self, address=None, tempSess=False, baud=None):
-        self.reinstantiate_session(address, tempSess, baud)
+    def __init__(self, address=None, tempSess=False, baud=None, write_termination=None, read_termination=None, data_bits=None, stop_bits=None, parity=None, timeout=None):
+        self.reinstantiate_session(address, tempSess, baud, write_termination, read_termination, data_bits, stop_bits, parity, timeout)
         self.tempSess = tempSess
         self.address = address
         self.baud = baud
+        self.write_termination = write_termination
+        self.read_termination = read_termination
+        self.data_bits = data_bits
+        self.stop_bits = stop_bits
+        self.parity = parity
 
-    def reinstantiate_session(self, address, tempSess, baud):
+    def reinstantiate_session(self, address, tempSess, baud, write_termination=None, read_termination=None, data_bits=None, stop_bits=None, parity=None, timeout=None):
         if address is not None and address.startswith('prologix://'):
             self._session_object = PrologixGPIBObject(address=address, tempSess=tempSess)
         else:
-            self._session_object = VISAObject(address=address, tempSess=tempSess, baud=baud)
+            self._session_object = VISAObject(address=address, tempSess=tempSess, baud=baud, write_termination=write_termination, read_termination=read_termination, data_bits=data_bits, stop_bits=stop_bits, parity=parity, timeout=timeout)
 
     def open(self):
         return self._session_object.open()
