@@ -12,9 +12,8 @@ class JKEM_201_TempController(VISAInstrumentDriver):
 
     def __init__(self, name=None, address=None, **kwargs):
         name = name or 'JKEM201'
-        VISAInstrumentDriver.__init__(
-            self,
-            name=name, address=address,
+
+        kwargs.extend(dict(
             baud=9600,
             write_termination = '\r',
             read_termination = '\r',
@@ -22,10 +21,11 @@ class JKEM_201_TempController(VISAInstrumentDriver):
             stop_bits = visa.constants.StopBits.one,
             parity = visa.constants.Parity.none,
             timeout = 1000,
-            **kwargs,
-            )
+        ))
+
+        VISAInstrumentDriver.__init__(self, name=name, address=address, **kwargs)
     
-    def set_temperature(self, temperature):
+    def set_setpoint(self, temperature):
         cmd = f"S(1,{round(temperature, 1)})"
         return float(self.query(cmd)) # returns the set temperature after setting it
 
