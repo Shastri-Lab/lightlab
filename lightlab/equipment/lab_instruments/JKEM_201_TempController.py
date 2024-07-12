@@ -13,7 +13,7 @@ class JKEM_201_TempController(VISAInstrumentDriver):
     def __init__(self, name=None, address=None, **kwargs):
         name = name or 'JKEM201'
 
-        kwargs.extend(dict(
+        kwargs.update(dict(
             baud=9600,
             write_termination = '\r',
             read_termination = '\r',
