@@ -384,8 +384,8 @@ class PrologixGPIB_USBObject(InstrumentSessionBase):
         self.__timeout = 2  # 2 seconds is the default
 
         if PrologixGPIB_USBObject.serFd==None:
-            #PrologixGPIB_USBObject.serFd=serial.Serial(comPort, baudrate=baud_rate, timeout=self.__timeout)
-            PrologixGPIB_USBObject.serFd=serial.serial_for_url(comPort, baudrate=baud_rate, timeout=self.__timeout)
+            PrologixGPIB_USBObject.serFd=serial.Serial(comPort, baudrate=baud_rate, timeout=self.__timeout)
+            #PrologixGPIB_USBObject.serFd=serial.serial_for_url(comPort, baudrate=baud_rate, timeout=self.__timeout)
             fullcmd = "++mode 1"+self.lineEnd
             bfullcmd = fullcmd.encode()
             PrologixGPIB_USBObject.serFd.write(bfullcmd )
