@@ -15,10 +15,11 @@ __status__ = "developping"
 
 
 try:
-    from itla_msa_modules.itla_msa import msa
+    from itla_msa import msa
     import serial    
     import struct
     import numpy as np
+    import time
 except:
    raise
    
@@ -71,9 +72,10 @@ class emcore_app:
         self.emcore_iTLA.close()
         try:
             if read_hex[-3] == '1':
-                print('iTLA is turned ON. \n')
+                return('iTLA is turned ON. \n')
             else:
                 print('debug: {0:s}'.format(read_hex))
+                return('debug: {0:s}'.format(read_hex))
         except:
             print('debug: {0:s}'.format(read_hex))
     
@@ -87,9 +89,10 @@ class emcore_app:
         self.emcore_iTLA.close()
         try:
             if read_hex[-3] == '0':
-                print('iTLA is turned OFF. \n')
+                return('iTLA is turned OFF. \n')
             else:
                 print('debug: {0:s}'.format(read_hex))
+                return('debug: {0:s}'.format(read_hex))
         except:
             print('debug: {0:s}'.format(read_hex))
             
@@ -112,10 +115,10 @@ class emcore_app:
         self.emcore_iTLA.close()
         #print('ninja3', read_byte)
         if bin(read_byte[0])[-2:]=='01' and read_byte[-2:].hex() == '0000':
-            print(str_cap[:num_byte])
             return str_cap[:num_byte]
         else:
             print('debug: {0:s}'.format(read_hex))
+            return('debug: {0:s}'.format(read_hex))
             
             
     def ask_device_ready(self):
@@ -123,17 +126,19 @@ class emcore_app:
             self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.nop()) #[MHz]
-            print("Trying to read_until()")
+            #print("Trying to read_until()")
             read_byte = self.emcore_iTLA.read_until()
-            print("Read : " + str(read_byte))
+            #print("Read : " + str(read_byte))
             #read_hex  = read_byte.hex()
         self.emcore_iTLA.close()
         read_bits  = read_byte[-1]
         bit4 = format(read_bits, '08b')[3]
         if bit4 == '1':
             print('Device is ready')
+            return(True)
         else:
             print('Device is not ready')
+            return(False)
 
     def set_output_power(self, pow_dbm):
         pow_100dbm = int(100 * pow_dbm)
@@ -144,6 +149,8 @@ class emcore_app:
             read_hex = self.emcore_iTLA.read_until().hex()
         self.emcore_iTLA.close()
         print('output power setting: {0:.2f}dBm, measured optical power: {1:.2f}dBm'\
+              .format(int(read_hex[-4:], base=16)/100.0, self.get_output_power()))
+        return('output power setting: {0:.2f}dBm, measured optical power: {1:.2f}dBm'\
               .format(int(read_hex[-4:], base=16)/100.0, self.get_output_power()))
 
     def set_first_channel_frequency(self, frequency_GHz):
@@ -176,6 +183,8 @@ class emcore_app:
         
         fcf_GHz = read_fcf1_GHz + read_fcf2_GHz + read_fcf3_GHz
         print('First Channel Frequency: {0:.3f}GHz'.format(fcf_GHz))
+        return('First Channel Frequency: {0:.3f}GHz'.format(fcf_GHz))
+
 
     def set_ftf_frequency(self, frequency_MHz):
         if self.emcore_iTLA.is_open != True:
@@ -215,6 +224,191 @@ class emcore_app:
         
         print('channel setting: {0:d}, channelH setting: {1:d}, FTF setting: {2:d}, measured_frequency: {3:.2f}GHz'\
               .format(read_channel, read_channelh, read_ftf, self.get_channel_frequency()))    
+        return('channel setting: {0:d}, channelH setting: {1:d}, FTF setting: {2:d}, measured_frequency: {3:.2f}GHz'\
+              .format(read_channel, read_channelh, read_ftf, self.get_channel_frequency()))
+              
+    def clean_jump(self, start_f, target_f, map_file='./1550_map.txt'):
+        cjf1_val = int(target_f * 1e-3)
+        cjf2_val = int((target_f - (cjf1_val * 1e3))*10)
+        err = 10000
+        # self.set_first_channel_frequency(start_f)
+        # self.itla_on()
+        
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open:
+            self.emcore_iTLA.write(msa.nop()) #Device ready
+        self.emcore_iTLA.close()
+        
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open:
+            self.emcore_iTLA.write(msa.clean_mode(2, 1)) #Activate clean mode
+        self.emcore_iTLA.close()
+        
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open:
+            self.emcore_iTLA.write(msa.cjf1(cjf1_val, 1)) #[THz]
+        self.emcore_iTLA.close()
+        
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open:
+            self.emcore_iTLA.write(msa.cjf2(cjf2_val, 1)) #[10*GHz]
+        self.emcore_iTLA.close()
+        
+        #=========== Calibrate sled temp and drive current ===================
+        param_map = np.loadtxt(map_file, delimiter=',')
+        i = np.argpartition(abs(param_map[:,0]-target_f/1000), 0)[0]
+        j = np.argpartition(abs(param_map[:,0]-target_f/1000), 1)[1]
+        s_temp = np.interp(target_f/1000, param_map[min(i, j):max(i,j)+1, 0], param_map[min(i, j):max(i,j)+1, 1])
+        d_current = np.interp(target_f/1000, param_map[min(i, j):max(i,j)+1, 0], param_map[min(i, j):max(i,j)+1, 6])
+        
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open:
+            self.emcore_iTLA.write(msa.sled_temp(s_temp, 1)) #0.01 C
+        self.emcore_iTLA.close()
+        
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open:
+            self.emcore_iTLA.write(msa.drive_current(d_current, 1)) #100 uA
+        self.emcore_iTLA.close()
+        #=====================================================================
+        
+        time.sleep(1.0)
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open:
+            self.emcore_iTLA.write(msa.clean_jump(1, 1)) #transfer frequency, temperature and current to memory
+        self.emcore_iTLA.close()
+        
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open:
+            self.emcore_iTLA.write(msa.clean_jump(1, 1)) #calculate filter 1
+        self.emcore_iTLA.close()
+        
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open:
+            self.emcore_iTLA.write(msa.clean_jump(1, 1)) #calculate filter 2
+        self.emcore_iTLA.close()
+        
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open:
+            self.emcore_iTLA.write(msa.clean_jump(1, 1)) #Execute the jump
+        self.emcore_iTLA.close()
+        
+        while (err > 0.5): #[GHz]
+            if self.emcore_iTLA.is_open != True:
+                self.emcore_iTLA.open()
+            if self.emcore_iTLA.is_open:
+                self.emcore_iTLA.write(msa.cj_err(0, 0)) #Monitor error until within range
+                read_hex = self.emcore_iTLA.read_until().hex()
+                err = int(read_hex[-4:], base = 16)
+                print(f"Clean jump error is {err}")
+            self.emcore_iTLA.close()
+
+        time.sleep(10)
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open:
+            self.emcore_iTLA.write(msa.clean_jump(0, 1)) #Stop Clean Jump
+        self.emcore_iTLA.close()
+        return f"Clean jumped to {target_f} with an error of {err}"
+        
+    def clean_jump_micro_itla_cal(self, start_f, grid, set_points=500):
+        if set_points > 500:
+            return 'Max number of set points is 500.'
+        
+        self.itla_off()
+        grid_f1 = int(grid/10)
+        grid_f2 = int((grid - grid_f1*10)*1e3)
+        self.set_first_channel_frequency(start_f)
+        time.sleep(1.0)
+        self.itla_on()
+        
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open:
+            self.emcore_iTLA.write(msa.grid_spacing(grid_f1, 1)) #Calibration frequency range
+        self.emcore_iTLA.close()
+        
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open:
+            self.emcore_iTLA.write(msa.grid_spacing_fine(grid_f2, 1)) #Calibration frequency range
+        self.emcore_iTLA.close()
+        
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open:
+            self.emcore_iTLA.write(msa.clean_jump_cal(set_points, 1)) #Number of set points
+        self.emcore_iTLA.close()
+        
+        cal_complete = 1
+        while cal_complete != 0:
+            time.sleep(1.0)
+            if self.emcore_iTLA.is_open != True:
+                self.emcore_iTLA.open()
+            if self.emcore_iTLA.is_open:
+                self.emcore_iTLA.write(msa.clean_jump_cal(0, 0)) #Monitor calibration progress
+                read_hex = self.emcore_iTLA.read_until().hex()
+                cal_complete = int(read_hex[-4:], base = 16)
+            self.emcore_iTLA.close()
+            
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open:
+            self.emcore_iTLA.write(msa.reset_enable(1, 1)) #Number of set points
+        self.emcore_iTLA.close()
+        return f"Clean jump finished for a step size of {grid} GHz starting at {start_f} GHz with {set_points} set points."
+    
+    def clean_jump_micro_itla(self, target_index):
+        cj_complete = 1
+        
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open:
+            self.emcore_iTLA.write(msa.clean_mode(2, 1)) #Activate clean mode
+        self.emcore_iTLA.close()
+        
+        time.sleep(1.0)
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open:
+            self.emcore_iTLA.write(msa.clean_jump_mitla(int(target_index+32768), 1)) #transfer frequency, temperature and current to memory
+        self.emcore_iTLA.close()
+        
+        time.sleep(1.0)
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open:
+            self.emcore_iTLA.write(msa.clean_jump_mitla(1, 1)) #calculate filter 1
+        self.emcore_iTLA.close()
+        
+        while (cj_complete != 0):
+            time.sleep(1.0)
+            if self.emcore_iTLA.is_open != True:
+                self.emcore_iTLA.open()
+            if self.emcore_iTLA.is_open:
+                self.emcore_iTLA.write(msa.clean_jump_mitla(0, 0)) #Monitor error until within range
+                read_hex = self.emcore_iTLA.read_until().hex()
+                cj_complete = int(read_hex[-4:], base = 16)
+                print(cj_complete)
+            self.emcore_iTLA.close()
+
+        time.sleep(1.0)
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open:
+            self.emcore_iTLA.write(msa.clean_jump_mitla(0, 1)) #Stop Clean Jump
+        self.emcore_iTLA.close()
+        return f"Clean jumped to #{target_index} set point."
         
     def get_output_power(self):
         if self.emcore_iTLA.is_open != True:
@@ -320,6 +514,7 @@ class emcore_app:
             return str_cap
         else:
             print('debug: {0:s}'.format(read_hex))
+            return('debug: {0:s}'.format(read_hex))
 
     def get_manufacturer(self):
         if self.emcore_iTLA.is_open != True:
@@ -339,8 +534,11 @@ class emcore_app:
         self.emcore_iTLA.close()
         if bin(read_byte[0])[-2:]=='01' and read_byte[-2:].hex() == '0000':
             print(str_cap)
+            return(str_cap)
         else:
             print('debug: {0:s}'.format(read_hex))
+            return('debug: {0:s}'.format(read_hex))
+
 
     def get_manufactured_date(self):
         if self.emcore_iTLA.is_open != True:
@@ -360,8 +558,11 @@ class emcore_app:
         self.emcore_iTLA.close()
         if bin(read_byte[0])[-2:]=='01' and read_byte[-2:].hex() == '0000':
             print(str_cap)
+            return(str_cap)
         else:
             print('debug: {0:s}'.format(read_hex))
+            return('debug: {0:s}'.format(read_hex))
+
 
     def get_io_capabilities(self):
         if self.emcore_iTLA.is_open != True:
@@ -371,6 +572,8 @@ class emcore_app:
             read_hex  = self.emcore_iTLA.read_until().hex()
         self.emcore_iTLA.close()
         print(read_hex)
+        return(read_hex)
+
 
     def get_device_errors(self):
         if self.emcore_iTLA.is_open != True:
@@ -380,6 +583,7 @@ class emcore_app:
             read_hex  = self.emcore_iTLA.read_until().hex()
         self.emcore_iTLA.close()
         print(read_hex)
+        return(read_hex)
         if self.emcore_iTLA.is_open != True:
             self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
@@ -387,8 +591,12 @@ class emcore_app:
             read_hex  = self.emcore_iTLA.read_until().hex()
         self.emcore_iTLA.close()
         print(read_hex)
-
+        return(read_hex)
+        
     def get_module_monitors(self):
+        
+        to_return = ''
+        
         # get temperature
         if self.emcore_iTLA.is_open != True:
             self.emcore_iTLA.open()
@@ -407,9 +615,11 @@ class emcore_app:
         self.emcore_iTLA.close()
         if bin(read_byte[0])[-2:]=='01' and read_byte[-2:].hex() == '0000':
             print('Diode T: {0:.2f}C, Case T: {1:.2f}C'.format(*temp_cap))
+            to_return += 'Diode T: {0:.2f}C, Case T: {1:.2f}C \n'.format(*temp_cap)
         else:
             print('debug: {0:s}'.format(read_hex))
-        
+            to_return += 'debug: {0:s} \n'.format(read_hex)
+
         # get current
         if self.emcore_iTLA.is_open != True:
             self.emcore_iTLA.open()
@@ -428,8 +638,11 @@ class emcore_app:
         self.emcore_iTLA.close()
         if bin(read_byte[0])[-2:]=='01' and read_byte[-2:].hex() == '0000':
             print('TEC current: {0:.1f}mA, Diode current: {1:.1f}mA'.format(*current_cap))
+            to_return += 'TEC current: {0:.1f}mA, Diode current: {1:.1f}mA \n'.format(*current_cap)
         else:
             print('debug: {0:s}'.format(read_hex))
+            return('debug: {0:s}'.format(read_hex))
+
         
         # get laser age
         if self.emcore_iTLA.is_open != True:
@@ -439,6 +652,10 @@ class emcore_app:
             age_hex  = self.emcore_iTLA.read_until().hex()
         self.emcore_iTLA.close()
         print('LASER Age: {0:d}%'.format(int(age_hex[-2:], base=16)))
+        to_return += 'LASER Age: {0:d}%'.format(int(age_hex[-2:], base=16))
+        
+        return to_return
+
 
     def get_power_capabilities(self):
         if self.emcore_iTLA.is_open != True:
@@ -456,6 +673,8 @@ class emcore_app:
         self.emcore_iTLA.close()
         powl = struct.unpack('>h',read_byte[-2:])[0]/100
         print('Power: {0:.1f}dBm - {1:.1f}dBm'.format(powl, powh))
+        return('Power: {0:.1f}dBm - {1:.1f}dBm'.format(powl, powh))
+
 
     def get_grid_capabilities(self):
         if self.emcore_iTLA.is_open != True:
@@ -474,6 +693,8 @@ class emcore_app:
             read_byte = self.emcore_iTLA.read_until()
         self.emcore_iTLA.close()
         print('Frequency Tuning: {0:d}MHz'.format(struct.unpack('>H',read_byte[-2:])[0]))
+        return('Frequency Tuning: {0:d}MHz'.format(struct.unpack('>H',read_byte[-2:])[0]))
+
         
     def get_frequency_capabilities(self):
         if self.emcore_iTLA.is_open != True:
@@ -512,7 +733,7 @@ class emcore_app:
         lfl1 = struct.unpack('>H',read_byte[-2:])[0]
         
         if self.emcore_iTLA.is_open != True:
-            self.emcore_iTLA.open()
+            self.eprintmcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.cap_freqlow2())
             read_byte = self.emcore_iTLA.read_until()
@@ -531,6 +752,8 @@ class emcore_app:
         lfl = lfl1 + lfl2 #+ lfl3
         
         print('Frequency Range: {0:.3f}THz - {1:.3f}THz'.format(lfl, lfh))
+        return('Frequency Range: {0:.3f}THz - {1:.3f}THz'.format(lfl, lfh))
+
 
 
     def port_close(self):
@@ -538,6 +761,8 @@ class emcore_app:
             self.emcore_iTLA.close()
         if self.emcore_iTLA.is_open==False:
             print('port closed. \n')
+            return('port closed. \n')
+
 
 
 

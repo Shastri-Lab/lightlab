@@ -15,8 +15,8 @@ __status__ = "developping"
 
 
 try:
-    from itla_msa_modules.itla_msa import msa
-    import serial
+    from itla_msa import msa
+    import serial    
     import struct
     import numpy as np
 except:
@@ -27,13 +27,16 @@ def read_until(self, terminator=LF, size=None):
     """\
     Read until a termination sequence is found ('\n' by default), the size
     is exceeded or until timeout occurs.
+    
+    CHANGE TO READ 4 BYTES
     """
     lenterm = len(terminator)
     line = bytearray()
     timeout = Timeout(self._timeout)
-    while True:
+#    while True:
+    for n in range(4):
         c = self.read(1)
-        print('ninja-read:', c, terminator, line)
+        #print('ninja-read:', c, terminator, line)
         if c:
             line += c
             if line[-lenterm:] == terminator:
@@ -59,7 +62,8 @@ class emcore_app:
         self.emcore_iTLA.close()
     
     def itla_on(self):
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.reset_enable(True, 1))
             read_byte = self.emcore_iTLA.read_until()
@@ -74,7 +78,8 @@ class emcore_app:
             print('debug: {0:s}'.format(read_hex))
     
     def itla_off(self):
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.reset_enable(False, 1))
             read_byte = self.emcore_iTLA.read_until()
@@ -88,9 +93,34 @@ class emcore_app:
         except:
             print('debug: {0:s}'.format(read_hex))
             
+    def get_serial_number(self):
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open:
+            self.emcore_iTLA.write(msa.serno())
+            read_hex  = self.emcore_iTLA.read_until().hex()
+            num_byte = int(read_hex[4:], base=16)
+            str_cap = ''
+            for ind in range(int(np.around(num_byte/2))):
+                #print('ninja2', read_hex)
+                self.emcore_iTLA.write(msa.aea_ear()) 
+                read_hex  = self.emcore_iTLA.read_until().hex()
+                str_cap += bytes.fromhex(read_hex[4:]).decode('utf-8')
+            self.emcore_iTLA.write(msa.aea_ear()) 
+            read_byte = self.emcore_iTLA.read_until()
+            read_hex  = read_byte.hex()
+        self.emcore_iTLA.close()
+        #print('ninja3', read_byte)
+        if bin(read_byte[0])[-2:]=='01' and read_byte[-2:].hex() == '0000':
+            print(str_cap[:num_byte])
+            return str_cap[:num_byte]
+        else:
+            print('debug: {0:s}'.format(read_hex))
+            
             
     def ask_device_ready(self):
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.nop()) #[MHz]
             print("Trying to read_until()")
@@ -107,7 +137,8 @@ class emcore_app:
 
     def set_output_power(self, pow_dbm):
         pow_100dbm = int(100 * pow_dbm)
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.optical_power(pow_100dbm, 1))
             read_hex = self.emcore_iTLA.read_until().hex()
@@ -119,21 +150,24 @@ class emcore_app:
         fcf1_val = int(frequency_GHz * 1e-3)
         fcf2_val = int((frequency_GHz - (fcf1_val * 1e3))*10)
         fcf3_val = int((frequency_GHz - fcf1_val*1e3 - fcf2_val*1e-1)*1e3)
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.fcf1(fcf1_val, 1)) #[THz]
             read_hex  = self.emcore_iTLA.read_until().hex()
         self.emcore_iTLA.close()
         read_fcf1_GHz = int(read_hex[-4:], base = 16) * 1.0e3 #[GHz]
         
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.fcf2(fcf2_val, 1)) #[10*GHz]
             read_hex  = self.emcore_iTLA.read_until().hex()
         self.emcore_iTLA.close()
         read_fcf2_GHz = int(read_hex[-4:], base = 16) / 10.0 #[GHz]
         
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.fcf3(fcf3_val, 1)) #[MHz]
             read_hex  = self.emcore_iTLA.read_until().hex()
@@ -144,7 +178,8 @@ class emcore_app:
         print('First Channel Frequency: {0:.3f}GHz'.format(fcf_GHz))
 
     def set_ftf_frequency(self, frequency_MHz):
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.ftf(frequency_MHz, 1)) #[MHz]
         self.emcore_iTLA.close()
@@ -154,21 +189,24 @@ class emcore_app:
             channel1 = [channel_num, 0]
         else:
             channel1 = channel_num
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.channel(channel1[0], 1))
             read_hex = self.emcore_iTLA.read_until().hex()
             read_channel = int(read_hex[-4:],base=16)
         self.emcore_iTLA.close()
         
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.channelh(channel1[1], 1))
             read_hexh = self.emcore_iTLA.read_until().hex()
             read_channelh = int(read_hexh[-4:],base=16)
         self.emcore_iTLA.close()
         
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.ftf(ftf, 1))
             read_hex = self.emcore_iTLA.read_until().hex()
@@ -179,7 +217,8 @@ class emcore_app:
               .format(read_channel, read_channelh, read_ftf, self.get_channel_frequency()))    
         
     def get_output_power(self):
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.measured_optical_power())
             read_hex = self.emcore_iTLA.read_until().hex()
@@ -188,21 +227,24 @@ class emcore_app:
         return measured_optical_power_dBm
 
     def get_first_channel_frequency(self):
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.fcf1(0, 0)) #[THz]
             read_hex  = self.emcore_iTLA.read_until().hex()
         self.emcore_iTLA.close()
         read_fcf1_GHz = int(read_hex[-4:], base = 16) * 1.0e3 #[GHz]
         
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.fcf2(0, 0)) #[10*GHz]
             read_hex  = self.emcore_iTLA.read_until().hex()
         self.emcore_iTLA.close()
         read_fcf2_GHz = int(read_hex[-4:], base = 16) / 10.0 #[GHz]
         
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.fcf3(0, 0)) #[MHz]
             read_hex  = self.emcore_iTLA.read_until().hex()
@@ -216,21 +258,24 @@ class emcore_app:
         return fcf_GHz
 
     def get_channel_frequency(self):
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.laser_frequency1()) #[THz]
             read_hex  = self.emcore_iTLA.read_until().hex()
         self.emcore_iTLA.close()
         read_lc1_GHz = int(read_hex[-4:], base = 16) * 1.0e3 #[GHz]
         
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.laser_frequency2()) #[10*GHz]
             read_hex  = self.emcore_iTLA.read_until().hex()
         self.emcore_iTLA.close()
         read_lc2_GHz = int(read_hex[-4:], base = 16) / 10.0 #[GHz]
         
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.laser_frequency3()) #[MHz]
             read_hex  = self.emcore_iTLA.read_until().hex()
@@ -243,7 +288,8 @@ class emcore_app:
         return lc_GHz
 
     def get_ftf_frequency(self):
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.ftf(0, 0)) #[MHz]
             read_hex  = self.emcore_iTLA.read_until().hex()
@@ -254,7 +300,8 @@ class emcore_app:
         return read_ftf_MHz
 
     def get_device_type(self):
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.devtyp()) 
             read_hex  = self.emcore_iTLA.read_until().hex()
@@ -275,7 +322,8 @@ class emcore_app:
             print('debug: {0:s}'.format(read_hex))
 
     def get_manufacturer(self):
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.manufacturer()) 
             read_hex  = self.emcore_iTLA.read_until().hex()
@@ -294,30 +342,9 @@ class emcore_app:
         else:
             print('debug: {0:s}'.format(read_hex))
 
-    def get_serial_number(self):
-        self.emcore_iTLA.open()
-        if self.emcore_iTLA.is_open:
-            self.emcore_iTLA.write(msa.serno())
-            read_hex  = self.emcore_iTLA.read_until().hex()
-            num_byte = int(read_hex[4:], base=16)
-            str_cap = ''
-            for ind in range(int(np.around(num_byte/2))):
-                print('ninja2', read_hex)
-                self.emcore_iTLA.write(msa.aea_ear()) 
-                read_hex  = self.emcore_iTLA.read_until().hex()
-                str_cap += bytes.fromhex(read_hex[4:]).decode('utf-8')
-            self.emcore_iTLA.write(msa.aea_ear()) 
-            read_byte = self.emcore_iTLA.read_until()
-            read_hex  = read_byte.hex()
-        self.emcore_iTLA.close()
-        print('ninja3', read_byte)
-        if bin(read_byte[0])[-2:]=='01' and read_byte[-2:].hex() == '0000':
-            print(str_cap[:num_byte])
-        else:
-            print('debug: {0:s}'.format(read_hex))
-
     def get_manufactured_date(self):
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.manufact_date())
             read_hex  = self.emcore_iTLA.read_until().hex()
@@ -337,7 +364,8 @@ class emcore_app:
             print('debug: {0:s}'.format(read_hex))
 
     def get_io_capabilities(self):
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.io_capabilities())
             read_hex  = self.emcore_iTLA.read_until().hex()
@@ -345,13 +373,15 @@ class emcore_app:
         print(read_hex)
 
     def get_device_errors(self):
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.device_fatal(0))
             read_hex  = self.emcore_iTLA.read_until().hex()
         self.emcore_iTLA.close()
         print(read_hex)
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.device_warning(0))
             read_hex  = self.emcore_iTLA.read_until().hex()
@@ -360,7 +390,8 @@ class emcore_app:
 
     def get_module_monitors(self):
         # get temperature
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.temperatures())
             read_hex  = self.emcore_iTLA.read_until().hex()
@@ -380,7 +411,8 @@ class emcore_app:
             print('debug: {0:s}'.format(read_hex))
         
         # get current
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.currents())
             read_hex  = self.emcore_iTLA.read_until().hex()
@@ -400,7 +432,8 @@ class emcore_app:
             print('debug: {0:s}'.format(read_hex))
         
         # get laser age
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.laser_age())
             age_hex  = self.emcore_iTLA.read_until().hex()
@@ -408,13 +441,15 @@ class emcore_app:
         print('LASER Age: {0:d}%'.format(int(age_hex[-2:], base=16)))
 
     def get_power_capabilities(self):
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.opsh())
             read_byte = self.emcore_iTLA.read_until()
         self.emcore_iTLA.close()
         powh = struct.unpack('>h',read_byte[-2:])[0]/100
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.opsl())
             read_byte = self.emcore_iTLA.read_until()
@@ -423,7 +458,8 @@ class emcore_app:
         print('Power: {0:.1f}dBm - {1:.1f}dBm'.format(powl, powh))
 
     def get_grid_capabilities(self):
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.cap_grid())
             read_byte = self.emcore_iTLA.read_until()
@@ -431,7 +467,8 @@ class emcore_app:
         print('Grid: {0:.1f}MHz'.format(struct.unpack('>H',read_byte[-2:])[0]*100))
 
     def get_ftf_capabilities(self):
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.cap_ftf())
             read_byte = self.emcore_iTLA.read_until()
@@ -439,14 +476,16 @@ class emcore_app:
         print('Frequency Tuning: {0:d}MHz'.format(struct.unpack('>H',read_byte[-2:])[0]))
         
     def get_frequency_capabilities(self):
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.cap_freqhigh1())
             read_byte = self.emcore_iTLA.read_until()
         self.emcore_iTLA.close()
         lfh1 = struct.unpack('>H',read_byte[-2:])[0]
         
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.cap_freqhigh2())
             read_byte = self.emcore_iTLA.read_until()
@@ -464,14 +503,16 @@ class emcore_app:
         
         lfh = lfh1 + lfh2 #+ lfh3
         
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.cap_freqlow1())
             read_byte = self.emcore_iTLA.read_until()
         self.emcore_iTLA.close()
         lfl1 = struct.unpack('>H',read_byte[-2:])[0]
         
-        self.emcore_iTLA.open()
+        if self.emcore_iTLA.is_open != True:
+            self.emcore_iTLA.open()
         if self.emcore_iTLA.is_open:
             self.emcore_iTLA.write(msa.cap_freqlow2())
             read_byte = self.emcore_iTLA.read_until()

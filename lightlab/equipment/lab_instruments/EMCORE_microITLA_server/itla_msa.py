@@ -16,7 +16,7 @@ __status__ = "developping"
 
 try:
    #from bip_4 import BIP4_lib as blib
-   from itla_msa_modules.bip_4 import BIP4_lib as blib
+   from bip_4 import BIP4_lib as blib
 except:
    raise
 
