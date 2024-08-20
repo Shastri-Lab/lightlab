@@ -20,7 +20,13 @@ try:
     import struct
     import numpy as np
 except:
-   raise
+   try:
+       from itla_msa import msa
+       import serial    
+       import struct
+       import numpy as np
+   except:
+       raise
    
 from serial.serialutil import LF, Timeout
 def read_until(self, terminator=LF, size=None):
@@ -58,7 +64,7 @@ class emcore_app:
     
     def __init__(self, comm_port, baudrate, timeout, bytesize):
         self.emcore_iTLA = serial.Serial(port=comm_port, baudrate=baudrate, \
-                                    timeout=timeout, bytesize=bytesize)
+                                    timeout=timeout, bytesize=bytesize, write_timeout = 1)
         self.emcore_iTLA.close()
     
     def itla_on(self):

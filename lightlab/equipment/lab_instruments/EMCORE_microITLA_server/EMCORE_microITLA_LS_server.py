@@ -14,6 +14,9 @@ Make sure PYTHONPATH points to folder containing itla_msa_modules
 import time
 import zmq
 
+#windows compatibility
+from sys import platform
+
 # NEC
 try:
     from serial.tools.list_ports import comports
@@ -112,6 +115,8 @@ class COM_manager():
         '''  
         def Filter(string, substr):
             return [str for str in string if any(sub in str for sub in substr)] 
+        if platform == 'win32':
+            return [x[0] for x in comports()]
         return Filter([x[0] for x in comports()],["USB", "usb"])
     
     def remove_port(self, port):
@@ -193,6 +198,7 @@ def identify_all(COMS):
     '''    
     iddict = {}
     for port in COMS.portlist:
+        print('portlist:' + str(COMS.portlist))
         try:
             # Create new object
             laser_id_obj = laser_id('empty', port)
@@ -202,9 +208,10 @@ def identify_all(COMS):
             iddict[laser_id_obj.serial_number] = laser_id_obj
         except:
             print('COM Port ' + port + ' failed, moving on')
-            COMS.remove_port(port)
-            COMS.add_unassigned_port(port)
             continue
+            #COMS.remove_port(port)
+            #COMS.add_unassigned_port(port)
+            #continue
     return iddict
 
 def identify_single(port, COMS, attempts=1):
@@ -248,6 +255,7 @@ def run(socket, attempts=5):
         try:
             COMS = COM_manager()
             iddict = identify_all(COMS)
+            print(COMS.portlist)
             initialized = 1
         except KeyboardInterrupt:
             return 0
@@ -258,6 +266,8 @@ def run(socket, attempts=5):
     print("Successfully interfaced :")
     for key in iddict.keys():
         print(key + ' | ' + str(iddict[key].port))
+    if len(iddict) == 0:
+        exit()
         
     # Run server
     try:    
