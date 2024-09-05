@@ -338,7 +338,7 @@ class Aragon_BOSA_400_Ether (object):
             log.exception("Please choose form 'REAL' or 'ASCII'")
         return Spectrum(x, y, inDbm=True)
 
-    def CAParam(self, avgCount='CONT', sMode='HR', noiseZero=False):
+    def CAParam(self, avgCount='CONT', avg_is_on = False, sMode='HR', noiseZero=False):
         if type(avgCount) is int:
             avgCount = str(avgCount)
         if type(avgCount) is not str:
@@ -366,7 +366,10 @@ class Aragon_BOSA_400_Ether (object):
                 if confirm!='OK\r\n':
                     print('error')
                     print(confirm)
-                self.write('SENS:AVER:STAT ON')
+                if avg_is_on:
+                    self.write('SENS:AVER:STAT ON')
+                else:
+                    self.write('SENS:AVER:STAT OFF')
                 confirm=self.read()
                 if confirm!='OK\r\n':
                     print('error')

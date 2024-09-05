@@ -12,7 +12,7 @@ class Korad_KD3005P(VISAInstrumentDriver):
 
     def __init__(self, name=None, address=None, **kwargs):
         name = name or 'Korad KD3005P'
-        VISAInstrumentDriver.__init__(self, name=name, address=address, **kwargs)
+        VISAInstrumentDriver.__init__(self, name=name, address=address, read_termination = '',write_termination = '', **kwargs)
     
     def get_idn(self):
         return self.query("*IDN?")
