@@ -51,10 +51,10 @@ class InstrumentSessionBase(ABC):
         pass
 
     def query_ascii_values(self, message, converter='f', separator=',',
-                           container=list):
+                           container=list, withTimeout=None):
         ''' Taken from pvisa.'''
 
-        block = self.query(message)
+        block = self.query(message, withTimeout)
         return from_ascii_block(block, converter, separator, container)
 
     def instrID(self):

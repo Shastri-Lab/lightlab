@@ -115,7 +115,7 @@ class TekScopeAbstract(Configurable, AbstractDriver):
         self._triggerAcquire(timeout=timeout)
         wfms = [None] * len(chans)
         for i, c in enumerate(chans):
-            vRaw = self.__transferData(c)
+            vRaw = self.__transferData(c, visatimeout=timeout)
             t, v = self.__scaleData(vRaw)
             # Optical modules might produce 'W' instead of 'V'
             unit = self.__getUnit()
@@ -166,7 +166,7 @@ class TekScopeAbstract(Configurable, AbstractDriver):
         # Bus and entire program stall until acquisition completes. Maximum of 30 seconds
         self.wait(int(timeout * 1e3))
 
-    def __transferData(self, chan):
+    def __transferData(self, chan, visatimeout):
         ''' Returns the raw data pulled from the scope as time (seconds) and voltage (Volts)
             Args:
                 chan (int): one channel at a time
@@ -181,7 +181,7 @@ class TekScopeAbstract(Configurable, AbstractDriver):
         self.setConfigParam('DATA:ENCDG', 'ASCII')
         self.setConfigParam('DATA:SOURCE', chStr)
 
-        voltRaw = self.query_ascii_values('CURV?')
+        voltRaw = self.query_ascii_values('CURV?', withTimeout=int(visatimeout*1e3))
         return voltRaw
 
     def __scaleData(self, voltRaw):
