@@ -10,7 +10,7 @@ class Agilent_54846B_Oscope (kf.VisaManager, VISAInstrumentDriver):
 
     def __init__(self, name='Infiniium Oscilloscope', address=None, **kwargs):
         VISAInstrumentDriver.__init__(self, name=name, address=address, **kwargs)
-        self.interface = visa.ResourceManager().open_resource(address)
+        self.interface = visa.ResourceManager().open_resource(address) #Note for Marcus: this makes it impossible to use prologix adapters
         self.FlexDCA = kf.VisaManager(address=address, scpi_echo=False)
         self.interface.timeout = 20000
 
