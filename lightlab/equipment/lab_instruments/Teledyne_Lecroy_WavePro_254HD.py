@@ -34,15 +34,36 @@ class WavePro254HDOscilloscope:
         self.scope.write(f"""VBS 'app.Acquisition.C{channel}.View = "ON"' """)
         self.scope.write(f"""VBS 'app.Acquisition.C{channel}.VerScale = {vdiv}' """)
         self.scope.write(f"""VBS 'app.Acquisition.Horizontal.HorScale = {tdiv}' """)
-        self.scope.write(f"""VBS 'app.Acquisition.TriggerMode = "Single"' """)
         self.scope.write(f"""VBS 'app.Acquisition.Trigger.edge.level = "{trig_level}"' """)
         self.scope.write(f"""VBS 'app.WaitUntilIdle(5)' """)
 
+    def voltage_offset(self, channel=1, v_off=0):
+        self.scope.write(f"C{channel}:OFST {v_off}")
+    
+    def trigger4OSA(self,):
+        #Set the BOSA tunable laser to 1516nm to 1564nm, with a sweep speed of 100nm/s
+        #This gives 1nm every 10ms
+        self.scope.write(f"TRIG_SELECT EDGE,SR,EX")
+        self.scope.write(f"""VBS 'app.Acquisition.Trigger.edge.level = "0.5"' """)
+        self.scope.write(f"""VBS 'app.Acquisition.Horizontal.HorScale = 50e-3' """)
+        self.scope.write(f"TRIG_DELAY -220e-3")
+    
+    def acquire(self, channels=[1]):
+        "This functions stops any current acquisition, then acquires the waveform data, and returns the trigger to auto mode"
+        self.scope.write(f"""VBS 'app.acquisition.triggermode = "stopped" ' """)
+        wfm = []
+        for i in range(len(channels)):
+            wfm.append(self.acquire_waveform(channel=channels[i]))
+        self.scope.write(f"""VBS 'app.acquisition.triggermode = "auto" ' """)
+        return wfm
+    
     def acquire_waveform(self, channel=1):
         self.scope.write(f"C{channel}:WAVEFORM? DATA_ARRAY_1")
         waveform_data = self.scope.read_raw()
         #waveform = np.frombuffer(waveform_data, dtype=np.float32)
 
+        #Please see page 6-21 and 6-22 for byte indices in waveform data that is sent. Note there is a 24 byte shift
+        #in the actual data compared to the datasheet. These numbers should be correct, but may be different for a different model.
         VERTICAL_GAIN = np.frombuffer(waveform_data[180:184], dtype='<f')[0] #Total gain of waveform, units per lsb
         VERTICAL_OFFSET = np.frombuffer(waveform_data[184:188], dtype='<f')[0] #Total vertical offset of waveform. To get floating values from raw data: VERTICAL_GAIN * data - VERTICAL_OFFSET
         HORIZONTAL_INTERVAL = np.frombuffer(waveform_data[200:204], dtype='<f')[0] #Sampling interval, the nominal time between successive points in the data
@@ -54,13 +75,20 @@ class WavePro254HDOscilloscope:
         t = HORIZONTAL_INTERVAL*range(int(WAVE_ARRAY_1)) + HORIZONTAL_OFFSET 
 
         return Waveform(t, v, unit='V')
+    
+    def set_trigger_source(self, channel='C1', coupling_type='DC'):
+        assert (channel == np.array(['C1','C2','C3','C4','EXT','EX10','ETM10'])).any(), f"Channel selected {channel} is not an allowed option"
+        assert (coupling_type == np.array(['DC', 'AC', 'HFREJ', 'LFREJ'])).any(), f"Coupling selected {coupling_type} is not an allowed option"
+        self.scope.write(f"{channel}:TRIG_COUPLING {coupling_type}")
 
     def observe(self,command):
         return self.scope.query(command)
+    
     def run(self):
-        "Run"
-        self.scope.write("")
-
+        self.scope.write(f"""VBS 'app.acquisition.triggermode = "auto" ' """)
+    def stop(self):
+        self.scope.write(f"""VBS 'app.acquisition.triggermode = "stopped" ' """)
+    
     def close(self):
         """ Close the connection to the oscilloscope """
         if self.scope is not None:
