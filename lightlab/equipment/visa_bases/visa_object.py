@@ -216,6 +216,8 @@ class VISAObject(InstrumentSessionBase):
 
     @termination.setter
     def termination(self, value):
+        if value is None:
+            value = self._termination
         if value in (CR, LF, CR + LF, ''):
             self._termination = value
         else:
