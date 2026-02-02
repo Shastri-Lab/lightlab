@@ -1354,3 +1354,215 @@ def assertValidPlotType(plType, dims=None, swpClass=None):
         errStr.append('Available plots are: {}'.format(', '.join(availablePlots(dims, swpClass))))
         logger.error('\n'.join(errStr))
         raise KeyError(plType)
+
+
+
+#### hugh's slice plotting functions ####
+
+def _find_single_vary_axis(arr, rtol=1e-7, atol=1e-9):
+    """
+    Infer the axis along which `arr` varies while being constant
+    along all other axes. Returns a list of candidate axes.
+    """
+    arr = np.asarray(arr)
+    if arr.ndim == 1:
+        return [0]
+
+    nd = arr.ndim
+    candidates = []
+
+    for ax in range(nd):
+        # baseline: all other axes at index 0
+        idx0 = [0] * nd
+        idx0[ax] = slice(None)
+        baseline = arr[tuple(idx0)]
+
+        ok = True
+        for other in range(nd):
+            if other == ax or arr.shape[other] == 1:
+                continue
+            idx = [0] * nd
+            idx[ax] = slice(None)
+            idx[other] = arr.shape[other] - 1
+            comp = arr[tuple(idx)]
+            if not np.allclose(comp, baseline, rtol=rtol, atol=atol, equal_nan=True):
+                ok = False
+                break
+
+        if ok:
+            candidates.append(ax)
+
+    return candidates
+
+
+def _axis_for_param(sweep, name):
+    """
+    Given an NdSweeper and the name of an actuation-like array
+    (e.g. 'Heater Current (mA)'), infer which axis that parameter
+    corresponds to.
+    """
+    arr = np.asarray(sweep.data[name])
+    candidates = _find_single_vary_axis(arr)
+    if len(candidates) != 1:
+        raise ValueError(
+            f"Could not infer a unique axis for parameter {name!r}; "
+            f"candidates={candidates}, shape={arr.shape}"
+        )
+    return candidates[0]
+
+
+def plot_measurement_slice(
+    sweep,
+    measurement='Spectrum',
+    *,
+    varying,
+    fixed=None,
+    cmap='coolwarm',
+    vlim=None,
+    xlim=None,
+    ax=None,
+    color_by=None,
+    **plot_kw,
+):
+    """
+    Plot a 1D slice of an arbitrary measurement from an NdSweeper.
+
+    Parameters
+    ----------
+    sweep : NdSweeper
+        The sweep object with sweep.data populated.
+    measurement : str
+        Name of the measurement in sweep.data to slice (e.g. 'Spectrum',
+        'Resonance Wavelength (nm)', 'Heater Power (mW)', ...).
+    varying : str
+        Name of the parameter that is allowed to vary along the slice
+        (typically an actuation, e.g. 'Heater Current (mA)' or
+        'Junction Voltage (V)').
+    fixed : dict[str, int], optional
+        Mapping from parameter name -> index at which that parameter
+        is held fixed. All other axes not mentioned in `fixed` and
+        not equal to `varying` are implicitly fixed to 0.
+    cmap : str
+        Matplotlib colormap name (only used when plotting multiple lines
+        like for 'Spectrum').
+    vlim : tuple[int|None, int|None] or None
+        Index-range on the varying axis to keep: (start, stop) in index
+        space (Python slicing semantics). Use None for open ends.
+        Example: vlim=(None, 10) keeps the first 10 points.
+    xlim : tuple[float, float] or None
+        X-axis limits for 'Spectrum' plots (wavelength domain).
+    ax : matplotlib.axes.Axes or None
+        Axis to draw on; created if None.
+    color_by : str or None
+        Name of the parameter to use for coloring the curves / colorbar.
+        Defaults to `varying`.
+    **plot_kw :
+        Extra keyword arguments passed to the underlying plotting calls:
+        - For 'Spectrum' measurements: forwarded to spec.simplePlot(...)
+        - For scalar measurements: forwarded to ax.plot(...)
+
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+    """
+    if fixed is None:
+        fixed = {}
+
+    if color_by is None:
+        color_by = varying
+
+    # Measurement array (e.g. object array of Spectrum, or numeric ndarray)
+    meas = sweep.data[measurement]
+    meas_arr = np.asarray(meas)
+    nd = meas_arr.ndim
+
+    # Map parameters to axes
+    axis_for = {}
+    axis_for[varying] = _axis_for_param(sweep, varying)
+    for name in fixed:
+        if name == varying:
+            raise ValueError(f"Cannot both vary and fix parameter {name!r}.")
+        axis_for[name] = _axis_for_param(sweep, name)
+
+    # Ensure axis assignments do not clash
+    used_axes = list(axis_for.values())
+    if len(set(used_axes)) != len(used_axes):
+        raise ValueError(
+            "Some parameters share the same inferred axis. "
+            "Check that your actuation arrays each vary along only one axis."
+        )
+
+    var_axis = axis_for[varying]
+
+    # Build index tuple: default all zeros, except varying axis is slice(None)
+    index = [0] * nd
+    index[var_axis] = slice(None)
+    for name, idx_val in fixed.items():
+        ax_idx = axis_for[name]
+        if ax_idx == var_axis:
+            raise ValueError(
+                f"Parameter {name!r} shares axis with varying parameter {varying!r}."
+            )
+        index[ax_idx] = idx_val
+
+    index = tuple(index)
+
+    # Extract the 1D slice of the measurement
+    slice_data = meas[index]
+
+    # Extract the 1D array of the color/x variable
+    color_arr_full = np.asarray(sweep.data[color_by])
+    if color_arr_full.shape != meas_arr.shape:
+        # This should not happen in a well-structured NdSweeper; fail loudly.
+        raise ValueError(
+            f"Shape mismatch between measurement {measurement!r} "
+            f"{meas_arr.shape} and parameter {color_by!r} {color_arr_full.shape}."
+        )
+    variable_arr = color_arr_full[index]
+
+    # Apply vlim (index-based slice in the varying direction)
+    if vlim is not None:
+        start, stop = vlim
+        slice_data = slice_data[start:stop]
+        variable_arr = variable_arr[start:stop]
+
+    # Prepare axes
+    if ax is None:
+        _, ax = plt.subplots(figsize=(10, 5))
+    fig = ax.get_figure()
+
+    # Decide if we are plotting "Spectrum-like" (object with .simplePlot)
+    # or scalar numeric data
+    is_object = np.asarray(slice_data, dtype=object).dtype == object
+    first_elem = None
+    if slice_data.size > 0:
+        first_elem = np.ravel(slice_data)[0]
+
+    if is_object and hasattr(first_elem, "simplePlot"):
+        # Multi-curve Spectrum plot: color curves by variable_arr
+        cmap_obj = plt.get_cmap(cmap)
+        norm = plt.Normalize(vmin=np.min(variable_arr), vmax=np.max(variable_arr))
+
+        for spec, var_val in zip(slice_data, variable_arr):
+            # Assumes spec.simplePlot uses current axes (matplotlib stateful API)
+            spec.simplePlot(color=cmap_obj(norm(var_val)), **plot_kw)
+
+        sm = plt.cm.ScalarMappable(cmap=cmap_obj, norm=norm)
+        sm.set_array([])
+        fig.colorbar(sm, ax=ax, label=color_by)
+
+        if xlim is not None:
+            ax.set_xlim(*xlim)
+
+    else:
+        # Scalar measurement: plot as a line vs variable_arr
+        ax.plot(variable_arr, slice_data, **plot_kw)
+        ax.set_xlabel(color_by)
+        ax.set_ylabel(measurement)
+
+    return ax
+
+
+
+
+
