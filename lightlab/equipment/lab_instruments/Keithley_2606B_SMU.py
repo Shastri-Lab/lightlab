@@ -32,9 +32,31 @@ from lightlab.equipment.visa_bases.driver_base import TCPSocketConnection
 from lightlab.laboratory.instruments import Keithley
 
 import socket
+import threading
 import numpy as np
 import time
 from lightlab import logger
+
+
+# Shared TCP connection pool: all Keithley channel instances on the same
+# IP:port reuse a single TCP socket (the 2606B only supports one connection).
+# Each entry also holds a threading.Lock to serialize access.
+_connection_pool = {}  # (ip_address, port) -> {'conn': TCPSocketConnection, 'lock': threading.Lock()}
+
+
+def _get_shared_connection(ip_address, port, timeout):
+    """Get or create a shared TCP connection and lock for a given IP:port."""
+    key = (ip_address, port)
+    if key not in _connection_pool:
+        _connection_pool[key] = {
+            'conn': TCPSocketConnection(
+                ip_address=ip_address,
+                port=port,
+                timeout=timeout,
+            ),
+            'lock': threading.Lock(),
+        }
+    return _connection_pool[key]['conn'], _connection_pool[key]['lock']
 
 
 class Keithley_2606B_SMU_TCP(VISAInstrumentDriver):
@@ -58,6 +80,7 @@ class Keithley_2606B_SMU_TCP(VISAInstrumentDriver):
     currStep = 0.1e-3
     voltStep = 0.3
     rampStepTime = 0.05  # in seconds.
+    _started = False
 
     def __init__(
         self,
@@ -94,49 +117,84 @@ class Keithley_2606B_SMU_TCP(VISAInstrumentDriver):
 
         visa_kwargs["tempSess"] = visa_kwargs.pop("tempSess", True)
         VISAInstrumentDriver.__init__(self, name=name, address=address, **visa_kwargs)
-        self.reinstantiate_session_TCP(address, visa_kwargs["tempSess"])
+        self._init_tcp_connection(address)
 
     # BEGIN TCPSOCKET METHODS
-    def reinstantiate_session_TCP(self, address, tempSess):
+    def _init_tcp_connection(self, address):
         if address is not None:
             # should be something like ['TCPIP0', 'xxx.xxx.xxx.xxx', '6501', 'SOCKET']
             address_array = address.split("::")
-            self._tcpsocket = TCPSocketConnection(
-                ip_address=address_array[1],
-                port=int(address_array[2]),
-                timeout=self.MAGIC_TIMEOUT,
+            ip_address = address_array[1]
+            port = int(address_array[2])
+            self._tcpsocket, self._tcp_lock = _get_shared_connection(
+                ip_address, port, self.MAGIC_TIMEOUT,
             )
+        else:
+            self._tcpsocket = None
+            self._tcp_lock = threading.Lock()
+
+    def reinstantiate_session(self, *args, **kwargs):
+        # No-op: we use a raw TCP socket, not a pyvisa session.
+        # Prevents VISAObject from opening a competing connection.
+        pass
 
     def open(self):
         if self.address is None:
             raise RuntimeError("Attempting to open connection to unknown address.")
-        try:
-            self._tcpsocket.connect()
-            super().open()
-        except socket.error:
-            self._tcpsocket.disconnect()
-            raise
+        with self._tcp_lock:
+            try:
+                self._tcpsocket.connect()
+            except socket.error:
+                self._tcpsocket.disconnect()
+                raise
+        if not self._started:
+            self._started = True
+            self.startup()
 
     def close(self):
-        self._tcpsocket.disconnect()
+        self._started = False
+        # Shared connection is not disconnected; other instances may be using it.
 
-    def _query(self, queryStr):
+    def _reconnect(self):
+        """Force-reconnect the shared TCP socket. Caller must hold _tcp_lock."""
+        self._tcpsocket.disconnect()
+        self._tcpsocket.connect()
+
+    def _query_unlocked(self, queryStr):
+        """Execute a query over the TCP socket.
+        Caller must hold _tcp_lock.
+        """
         with self._tcpsocket.connected() as s:
             s.send(queryStr)
 
-            i = 0
-            old_timeout = s.timeout
-            s.timeout = self.MAGIC_TIMEOUT
-            received_msg = ""
-            while i < 1024:  # avoid infinite loop
-                recv_str = s.recv(1024)
-                received_msg += recv_str
-                if recv_str.endswith("\n"):
-                    break
-                s.timeout = 1
-                i += 1
-            s.timeout = old_timeout
+            raw_socket = self._tcpsocket._socket
+            old_timeout = raw_socket.gettimeout()
+            try:
+                raw_socket.settimeout(self.MAGIC_TIMEOUT)
+                received_msg = ""
+                i = 0
+                while i < 1024:  # avoid infinite loop
+                    recv_str = s.recv(1024)
+                    if not recv_str:
+                        raise ConnectionResetError("Remote closed connection")
+                    received_msg += recv_str
+                    if recv_str.endswith("\n"):
+                        break
+                    raw_socket.settimeout(1)
+                    i += 1
+            finally:
+                raw_socket.settimeout(old_timeout)
             return received_msg.rstrip()
+
+    def _query(self, queryStr):
+        """Query with lock and automatic reconnect on broken pipe."""
+        with self._tcp_lock:
+            try:
+                return self._query_unlocked(queryStr)
+            except (BrokenPipeError, ConnectionResetError, OSError) as e:
+                logger.warning("Connection error (%s), reconnecting and retrying...", e)
+                self._reconnect()
+                return self._query_unlocked(queryStr)
 
     def query(self, queryStr, expected_talker=None):
         ret = self._query(queryStr)
@@ -152,10 +210,21 @@ class Keithley_2606B_SMU_TCP(VISAInstrumentDriver):
             logger.debug("'%s' returned '%s'", queryStr, ret)
         return ret
 
-    def write(self, writeStr):
+    def _write_unlocked(self, writeStr):
+        """Execute a write over the TCP socket. Caller must hold _tcp_lock."""
+        logger.debug("Sending '%s'", writeStr)
         with self._tcpsocket.connected() as s:
-            logger.debug("Sending '%s'", writeStr)
             s.send(writeStr)
+
+    def write(self, writeStr):
+        """Write with lock and automatic reconnect on broken pipe."""
+        with self._tcp_lock:
+            try:
+                self._write_unlocked(writeStr)
+            except (BrokenPipeError, ConnectionResetError, OSError) as e:
+                logger.warning("Connection error (%s), reconnecting and retrying...", e)
+                self._reconnect()
+                self._write_unlocked(writeStr)
         time.sleep(0.05)
 
     # END TCPSOCKET METHODS

@@ -145,11 +145,28 @@ class TCPSocketConnection(object):
             return self._socket
 
     def disconnect(self):
-        ''' If connected, disconnects and kills the socket.'''
+        ''' If connected, disconnects and kills the socket.
+        Handles already-broken sockets gracefully.
+        '''
         if self._socket is not None:
-            self._socket.shutdown(socket.SHUT_WR)
-            self._socket.close()
+            try:
+                self._socket.shutdown(socket.SHUT_WR)
+            except OSError:
+                pass  # Socket may already be broken
+            try:
+                self._socket.close()
+            except OSError:
+                pass
             self._socket = None
+
+    def set_socket_timeout(self, timeout):
+        ''' Set the timeout on the underlying raw socket, if connected.
+
+        Args:
+            timeout (float): timeout in seconds
+        '''
+        if self._socket is not None:
+            self._socket.settimeout(timeout)
 
     @contextmanager
     def connected(self):
