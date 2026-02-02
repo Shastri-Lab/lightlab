@@ -128,6 +128,8 @@ def findPeaks(
 
     descendBy = descendMax
 
+    baseline = np.min(yArr)
+    yArr -= baseline
     yArrOrig = yArr.copy()
 
     for iPk in range(expectedCnt):  # Loop over peaks
@@ -162,7 +164,7 @@ def findPeaks(
                     plt.plot(yArrOrig)
                     plt.show(block=True)
                     raise PeakFinderError(
-                        "Did not find enough peaks exceeding threshold"
+                        "Did not find enough peaks exceeding threshold!"
                     )
 
             # descend data down by a threshold amount
