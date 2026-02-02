@@ -1025,6 +1025,146 @@ class CommandControlSweeper(Sweeper):
             return accuracyBits, precisionBits
 
 
+def combineNdSweepers(sweeper1, sweeper2, axis, sort=True):
+    ''' Combine two NdSweeper objects along a specified actuation axis.
+
+        The two sweepers must have:
+        - The same actuation keys
+        - Identical domains for all actuations except the one being combined
+        - Compatible data keys
+
+        Args:
+            sweeper1 (NdSweeper): First sweeper object (must have data gathered)
+            sweeper2 (NdSweeper): Second sweeper object (must have data gathered)
+            axis (str): Name of the actuation axis to combine along
+            sort (bool): If True and the axis domain is numeric, sort the combined
+                domain in ascending order and reorder data accordingly.
+                If the domain is non-numeric (e.g., strings), sorting is skipped.
+                Default is True.
+
+        Returns:
+            NdSweeper: A new sweeper with combined data along the specified axis.
+                The new sweeper has actuation domains and data arrays that are
+                the concatenation (and optionally sorted) of the two inputs.
+
+        Raises:
+            ValueError: If the sweepers have incompatible actuations or data.
+
+        Example:
+            >>> # Both sweepers have 'Index' and 'Current' actuations
+            >>> # sweeper1 has Index domain [0, 1, 2], sweeper2 has [3, 4, 5]
+            >>> combined = combineNdSweepers(sweeper1, sweeper2, 'Index')
+            >>> # combined.actuate['Index'].domain is now [0, 1, 2, 3, 4, 5]
+    '''
+    # Validate that both sweepers have the same actuation keys
+    keys1 = list(sweeper1.actuate.keys())
+    keys2 = list(sweeper2.actuate.keys())
+    if keys1 != keys2:
+        raise ValueError(
+            f'Sweepers have different actuation keys: {keys1} vs {keys2}')
+
+    if axis not in keys1:
+        raise ValueError(
+            f'Axis "{axis}" not found in actuations. Available: {keys1}')
+
+    # Validate that all other actuations have identical domains
+    for key in keys1:
+        if key == axis:
+            continue
+        dom1 = sweeper1.actuate[key].domain
+        dom2 = sweeper2.actuate[key].domain
+        if dom1 is None and dom2 is None:
+            continue
+        if dom1 is None or dom2 is None:
+            raise ValueError(
+                f'Actuation "{key}" has domain in one sweeper but not the other')
+        if not np.array_equal(dom1, dom2):
+            raise ValueError(
+                f'Actuation "{key}" has different domains in the two sweepers')
+
+    # Validate that both sweepers have data
+    if sweeper1.data is None or sweeper2.data is None:
+        raise ValueError('Both sweepers must have gathered data')
+
+    # Find the axis index in the actuation order
+    axis_idx = keys1.index(axis)
+
+    # Get the domains for the axis being combined
+    dom1 = sweeper1.actuate[axis].domain
+    dom2 = sweeper2.actuate[axis].domain
+
+    # Concatenate domains
+    combined_domain = np.concatenate([dom1, dom2])
+
+    # Determine if we should sort (only for numeric types)
+    should_sort = False
+    sort_indices = None
+    if sort:
+        # Check if domain is numeric
+        try:
+            # This will fail for string arrays
+            combined_domain_float = combined_domain.astype(float)
+            should_sort = True
+            sort_indices = np.argsort(combined_domain_float)
+            combined_domain = combined_domain[sort_indices]
+        except (ValueError, TypeError):
+            # Non-numeric domain, don't sort
+            should_sort = False
+
+    # Create new sweeper
+    new_sweeper = NdSweeper()
+
+    # Add actuations with updated domain for the combined axis
+    for key in keys1:
+        old_actu = sweeper1.actuate[key]
+        if key == axis:
+            new_domain = combined_domain
+        else:
+            new_domain = old_actu.domain
+        new_sweeper.addActuation(
+            key, old_actu.function, new_domain, old_actu.doOnEveryPoint)
+
+    # Copy measurements and parsers from the first sweeper
+    for mNam, mVal in sweeper1.measure.items():
+        new_sweeper.addMeasurement(mNam, mVal)
+    for pNam, pVal in sweeper1.parse.items():
+        new_sweeper.parse[pNam] = pVal
+
+    # Combine data arrays
+    new_sweeper.data = OrderedDict()
+
+    # Get the union of data keys from both sweepers
+    all_data_keys = set(sweeper1.data.keys()) | set(sweeper2.data.keys())
+
+    for key in all_data_keys:
+        if key not in sweeper1.data or key not in sweeper2.data:
+            logger.warning(
+                f'Data key "{key}" only present in one sweeper, skipping')
+            continue
+
+        data1 = sweeper1.data[key]
+        data2 = sweeper2.data[key]
+
+        # Concatenate along the axis dimension
+        combined_data = np.concatenate([data1, data2], axis=axis_idx)
+
+        # Sort if needed
+        if should_sort and sort_indices is not None:
+            # Build the indexer for the sort
+            # We need to index only along axis_idx with sort_indices
+            indexer = [slice(None)] * combined_data.ndim
+            indexer[axis_idx] = sort_indices
+            combined_data = combined_data[tuple(indexer)]
+
+        new_sweeper.data[key] = combined_data
+
+    # Copy options
+    new_sweeper.plotOptions.update(sweeper1.plotOptions)
+    new_sweeper.monitorOptions.update(sweeper1.monitorOptions)
+
+    return new_sweeper
+
+
 interAx = None
 hCurves = None
 hArrow = None
