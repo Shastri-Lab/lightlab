@@ -26,10 +26,14 @@ print(smua.measure.i(smua.nvbuffer1))
 -- Turn off output.
 smua.source.output = smua.OUTPUT_OFF
 
+Supports both TCP (TSP-Link multi-device) and VISA (USB/GPIB single-device)
+connections.  The connection type is auto-detected from the address format:
+
+- Address containing ``SOCKET`` -> TCP mode (e.g. ``TCPIP0::192.168.1.100::5025::SOCKET``)
+- Anything else -> VISA mode (e.g. ``USB0::...``, ``GPIB0::...``)
 """
 from . import VISAInstrumentDriver
 from lightlab.equipment.visa_bases.driver_base import TCPSocketConnection
-from lightlab.laboratory.instruments import Keithley
 
 import socket
 import threading
@@ -59,17 +63,24 @@ def _get_shared_connection(ip_address, port, timeout):
     return _connection_pool[key]['conn'], _connection_pool[key]['lock']
 
 
-class Keithley_2606B_SMU_TCP(VISAInstrumentDriver):
-    """ Keithley 2606B 4x SMU instrument driver
+class Keithley_2606B_SMU(VISAInstrumentDriver):
+    """ Keithley 2606B SMU instrument driver (TCP and VISA).
 
         `Manual: <https://download.tek.com/manual/2606B-901-01B_May_2018_Ref_Man.pdf>`__
 
-        Usage: Unavailable
+        Capable of sourcing current and measuring voltage, as a Source
+        Measurement Unit.
 
-        Capable of sourcing current and measuring voltage, as a Source Measurement Unit.
+        Connection type is auto-detected from the address:
+
+        - Address containing ``SOCKET`` -> TCP mode with shared socket pool.
+          Requires ``tsp_node`` (1-64) for TSP-Link multi-device setups.
+        - Anything else -> VISA mode (USB, GPIB, etc.) for a single
+          directly-connected device.
     """
 
-    instrument_category = Keithley
+    # instrument_category left as None (inherited default).
+    # The driver is used directly, not wrapped by a Keithley instrument object.
 
     tsp_node = None
     channel = None
@@ -80,7 +91,6 @@ class Keithley_2606B_SMU_TCP(VISAInstrumentDriver):
     currStep = 0.1e-3
     voltStep = 0.3
     rampStepTime = 0.05  # in seconds.
-    _started = False
 
     def __init__(
         self,
@@ -92,11 +102,13 @@ class Keithley_2606B_SMU_TCP(VISAInstrumentDriver):
     ):
         """
         Args:
-            tsp_node: Number from 1 to 64 corresponding to the
-                pre-configured TSP node number assigned to each module.
-            channel: 'A' or 'B'
+            name: Instrument name.
+            address: VISA address string.  If it contains ``SOCKET``, TCP
+                mode is used; otherwise standard VISA (USB/GPIB).
+            tsp_node: TSP-Link node number (1-64).  Required for TCP mode,
+                ignored for VISA mode.
+            channel: ``'A'`` or ``'B'``.
         """
-
         if channel is None:
             logger.warning("Forgot to select a channel: either 'A', or 'B'")
         elif channel not in ("A", "B", "a", "b"):
@@ -104,22 +116,70 @@ class Keithley_2606B_SMU_TCP(VISAInstrumentDriver):
         else:
             self.channel = channel.upper()
 
-        if tsp_node is None:
-            logger.warning("Forgot to specify a tsp_node integer number between 1 and 64.")
-        elif not isinstance(tsp_node, int):
-            raise RuntimeError(
-                "Please specify a tsp_node integer number between 1 and 64."
-            )
-        elif not 1 <= tsp_node <= 64:
-            raise RuntimeError("Invalid tsp_node. Valid numbers between 1 and 64.")
+        # Detect connection type from address
+        self._connection_type = self._detect_connection_type(address)
+
+        if self._connection_type == "tcp":
+            if tsp_node is None:
+                logger.warning("Forgot to specify a tsp_node integer number between 1 and 64.")
+            elif not isinstance(tsp_node, int):
+                raise RuntimeError(
+                    "Please specify a tsp_node integer number between 1 and 64."
+                )
+            elif not 1 <= tsp_node <= 64:
+                raise RuntimeError("Invalid tsp_node. Valid numbers between 1 and 64.")
 
         self.tsp_node = tsp_node
 
+        self._started = False
+
         visa_kwargs["tempSess"] = visa_kwargs.pop("tempSess", True)
         VISAInstrumentDriver.__init__(self, name=name, address=address, **visa_kwargs)
-        self._init_tcp_connection(address)
 
-    # BEGIN TCPSOCKET METHODS
+        if self._connection_type == "tcp":
+            self._init_tcp_connection(address)
+        else:
+            self._tcpsocket = None
+            self._tcp_lock = None
+
+    @staticmethod
+    def _detect_connection_type(address):
+        """Return ``'tcp'`` or ``'visa'`` based on the address format."""
+        if address is not None and "SOCKET" in address.upper():
+            return "tcp"
+        return "visa"
+
+    # ------------------------------------------------------------------
+    # SMU addressing
+    # ------------------------------------------------------------------
+
+    @property
+    def smu_string(self):
+        """Return ``'smua'`` or ``'smub'`` based on the channel."""
+        if self.channel.upper() == "A":
+            return "smua"
+        elif self.channel.upper() == "B":
+            return "smub"
+        else:
+            raise RuntimeError(
+                "Unexpected channel: {}, should be 'A' or 'B'".format(self.channel)
+            )
+
+    @property
+    def smu_full_string(self):
+        """Return the fully-qualified SMU string.
+
+        - TCP/TSP-Link: ``node[N].smuX``
+        - VISA (single device): ``smuX``
+        """
+        if self.tsp_node is not None:
+            return "node[{N}].{smuX}".format(N=self.tsp_node, smuX=self.smu_string)
+        return self.smu_string
+
+    # ------------------------------------------------------------------
+    # TCP socket methods (only used when _connection_type == "tcp")
+    # ------------------------------------------------------------------
+
     def _init_tcp_connection(self, address):
         if address is not None:
             # should be something like ['TCPIP0', 'xxx.xxx.xxx.xxx', '6501', 'SOCKET']
@@ -133,34 +193,12 @@ class Keithley_2606B_SMU_TCP(VISAInstrumentDriver):
             self._tcpsocket = None
             self._tcp_lock = threading.Lock()
 
-    def reinstantiate_session(self, *args, **kwargs):
-        # No-op: we use a raw TCP socket, not a pyvisa session.
-        # Prevents VISAObject from opening a competing connection.
-        pass
-
-    def open(self):
-        if self.address is None:
-            raise RuntimeError("Attempting to open connection to unknown address.")
-        with self._tcp_lock:
-            try:
-                self._tcpsocket.connect()
-            except socket.error:
-                self._tcpsocket.disconnect()
-                raise
-        if not self._started:
-            self._started = True
-            self.startup()
-
-    def close(self):
-        self._started = False
-        # Shared connection is not disconnected; other instances may be using it.
-
     def _reconnect(self):
         """Force-reconnect the shared TCP socket. Caller must hold _tcp_lock."""
         self._tcpsocket.disconnect()
         self._tcpsocket.connect()
 
-    def _query_unlocked(self, queryStr):
+    def _tcp_query_unlocked(self, queryStr):
         """Execute a query over the TCP socket.
         Caller must hold _tcp_lock.
         """
@@ -186,18 +224,79 @@ class Keithley_2606B_SMU_TCP(VISAInstrumentDriver):
                 raw_socket.settimeout(old_timeout)
             return received_msg.rstrip()
 
-    def _query(self, queryStr):
+    def _tcp_query(self, queryStr):
         """Query with lock and automatic reconnect on broken pipe."""
         with self._tcp_lock:
             try:
-                return self._query_unlocked(queryStr)
+                return self._tcp_query_unlocked(queryStr)
             except (BrokenPipeError, ConnectionResetError, OSError) as e:
                 logger.warning("Connection error (%s), reconnecting and retrying...", e)
                 self._reconnect()
-                return self._query_unlocked(queryStr)
+                return self._tcp_query_unlocked(queryStr)
+
+    def _tcp_write_unlocked(self, writeStr):
+        """Execute a write over the TCP socket. Caller must hold _tcp_lock."""
+        logger.debug("Sending '%s'", writeStr)
+        with self._tcpsocket.connected() as s:
+            s.send(writeStr)
+
+    def _tcp_write(self, writeStr):
+        """Write with lock and automatic reconnect on broken pipe."""
+        with self._tcp_lock:
+            try:
+                self._tcp_write_unlocked(writeStr)
+            except (BrokenPipeError, ConnectionResetError, OSError) as e:
+                logger.warning("Connection error (%s), reconnecting and retrying...", e)
+                self._reconnect()
+                self._tcp_write_unlocked(writeStr)
+
+    # ------------------------------------------------------------------
+    # Connection-type-dependent methods
+    # ------------------------------------------------------------------
+
+    def reinstantiate_session(self, *args, **kwargs):
+        if getattr(self, '_connection_type', None) == "tcp":
+            # No-op: we use a raw TCP socket, not a pyvisa session.
+            pass
+        else:
+            super().reinstantiate_session(*args, **kwargs)
+
+    def open(self):
+        if self._connection_type == "tcp":
+            if self.address is None:
+                raise RuntimeError("Attempting to open connection to unknown address.")
+            with self._tcp_lock:
+                try:
+                    self._tcpsocket.connect()
+                except socket.error:
+                    self._tcpsocket.disconnect()
+                    raise
+            if not self._started:
+                self._started = True
+                self.startup()
+        else:
+            super().open()
+
+    def close(self):
+        if self._connection_type == "tcp":
+            self._started = False
+            # Shared connection is not disconnected; other instances may be using it.
+        else:
+            super().close()
+
+    def write(self, writeStr):
+        if self._connection_type == "tcp":
+            self._tcp_write(writeStr)
+            time.sleep(0.05)
+        else:
+            self._session_object.write(writeStr)
 
     def query(self, queryStr, expected_talker=None):
-        ret = self._query(queryStr)
+        if self._connection_type == "tcp":
+            ret = self._tcp_query(queryStr)
+        else:
+            ret = self._session_object.query(queryStr)
+
         if expected_talker is not None:
             if ret != expected_talker:
                 log_function = logger.warning
@@ -210,66 +309,54 @@ class Keithley_2606B_SMU_TCP(VISAInstrumentDriver):
             logger.debug("'%s' returned '%s'", queryStr, ret)
         return ret
 
-    def _write_unlocked(self, writeStr):
-        """Execute a write over the TCP socket. Caller must hold _tcp_lock."""
-        logger.debug("Sending '%s'", writeStr)
-        with self._tcpsocket.connected() as s:
-            s.send(writeStr)
-
-    def write(self, writeStr):
-        """Write with lock and automatic reconnect on broken pipe."""
-        with self._tcp_lock:
-            try:
-                self._write_unlocked(writeStr)
-            except (BrokenPipeError, ConnectionResetError, OSError) as e:
-                logger.warning("Connection error (%s), reconnecting and retrying...", e)
-                self._reconnect()
-                self._write_unlocked(writeStr)
-        time.sleep(0.05)
-
-    # END TCPSOCKET METHODS
-
-    @property
-    def smu_string(self):
-        if self.channel.upper() == "A":
-            return "smua"
-        elif self.channel.upper() == "B":
-            return "smub"
-        else:
-            raise RuntimeError(
-                "Unexpected channel: {}, should be 'A' or 'B'".format(self.channel)
+    def instrID(self):
+        if self._connection_type == "tcp":
+            query_str = (
+                "print([[Keithley Instruments Inc., Model ]].."
+                "node[{tsp_node}].model..[[, ]]..node[{tsp_node}].serialno..[[, ]]..node[{tsp_node}].revision)".format(
+                    tsp_node=self.tsp_node
+                )
             )
+            return self.query(query_str)
+        else:
+            return self._session_object.instrID()
 
-    @property
-    def smu_full_string(self):
-        return "node[{N}].{smuX}".format(N=self.tsp_node, smuX=self.smu_string)
+    # ------------------------------------------------------------------
+    # Common instrument methods
+    # ------------------------------------------------------------------
 
     def query_print(self, query_string, expected_talker=None):
-        time.sleep(0.01)
+        if self._connection_type == "tcp":
+            time.sleep(0.01)
+        else:
+            time.sleep(0.1)
         query_string = "print(" + query_string + ")"
         return self.query(query_string, expected_talker=expected_talker)
 
     def smu_reset(self):
-        self.write(
-            "node[{tsp_node}].{smu_ch}.reset()".format(
-                tsp_node=self.tsp_node, smu_ch=self.smu_string
-            )
-        )
+        self.write("{smuX}.reset()".format(smuX=self.smu_full_string))
 
-    def instrID(self):
-        query_str = (
-            "print([[Keithley Instruments Inc., Model ]].."
-            "node[{tsp_node}].model..[[, ]]..node[{tsp_node}].serialno..[[, ]]..node[{tsp_node}].revision)".format(
-                tsp_node=self.tsp_node
-            )
-        )
-        return self.query(query_str)
+    def smu_defaults(self):
+        self.write("{smuX}.source.offfunc = 0".format(smuX=self.smu_full_string))  # 0 or smuX.OUTPUT_DCAMPS: Source 0 A
+        self.write("{smuX}.source.offmode = 0".format(smuX=self.smu_full_string))  # 0 or smuX.OUTPUT_NORMAL: Configures the source function according to smuX.source.offfunc attribute
+        self.write("{smuX}.source.highc = 1".format(smuX=self.smu_full_string))  # 1 or smuX.ENABLE: Enables high-capacitance mode
+        self.set_sense_mode(sense_mode="local")
+
+    def startup(self):
+        if self._connection_type == "tcp":
+            self.tsp_startup()
+        self.smu_reset()
+        self.smu_defaults()
+        self.write("waitcomplete()")
+        time.sleep(0.01)
+        self.query_print('"startup complete."', expected_talker="startup complete.")
 
     def is_master(self):
         """ Returns true if this TSP node is the localnode.
 
         The localnode is the one being interfaced with the Ethernet cable,
         whereas the other nodes are connected to it via the TSP-Link ports.
+        Only meaningful in TCP/TSP-Link mode.
         """
         return self.query_print("localnode.serialno") == self.query_print(
             "node[{tsp_node}].serialno".format(tsp_node=self.tsp_node)
@@ -288,21 +375,6 @@ class Keithley_2606B_SMU_TCP(VISAInstrumentDriver):
             nodes = int(float(self.query_print("tsplink.reset()")))
             logger.debug("%s TSP nodes found.", nodes)
             return True
-
-    def smu_defaults(self):
-        self.write("{smuX}.source.offfunc = 0".format(smuX=self.smu_full_string))  # 0 or smuX.OUTPUT_DCAMPS: Source 0 A
-        self.write("{smuX}.source.offmode = 0".format(smuX=self.smu_full_string))  # 0 or smuX.OUTPUT_NORMAL: Configures the source function according to smuX.source.offfunc attribute
-        self.write("{smuX}.source.highc = 1".format(smuX=self.smu_full_string))  # 1 or smuX.ENABLE: Enables high-capacitance mode
-        # self.write("{smuX}.sense = 0".format(smuX=self.smu_full_string))  # 0 or smuX.SENSE_LOCAL: Selects local sense (2-wire)
-        self.set_sense_mode(sense_mode="local")
-
-    def startup(self):
-        self.tsp_startup()
-        self.smu_reset()
-        self.smu_defaults()
-        self.write("waitcomplete()")
-        time.sleep(0.01)
-        self.query_print('"startup complete."', expected_talker="startup complete.")
 
     def set_sense_mode(self, sense_mode="local"):
         ''' Set sense mode. Defaults to local sensing. '''
@@ -455,3 +527,7 @@ class Keithley_2606B_SMU_TCP(VISAInstrumentDriver):
         self.__setSourceMode(isCurrentSource=True)
         self.setProtectionVoltage(protectionVoltage)
         self._configCurrent(0)
+
+
+# Backward compatibility alias
+Keithley_2606B_SMU_TCP = Keithley_2606B_SMU
