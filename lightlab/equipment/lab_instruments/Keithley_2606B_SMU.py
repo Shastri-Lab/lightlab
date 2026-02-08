@@ -362,6 +362,21 @@ class Keithley_2606B_SMU(VISAInstrumentDriver):
             "node[{tsp_node}].serialno".format(tsp_node=self.tsp_node)
         )
 
+    def get_tsp_node(self):
+        """Return the TSP-Link node number currently assigned to this device."""
+        return int(float(self.query_print("tsplink.node")))
+
+    def set_tsp_node(self, node_number):
+        """Assign a TSP-Link node number (1-64) to this device.
+
+        Typically used over USB/VISA so the device can later be reached
+        via TCP/TSP-Link at the configured node number.
+        """
+        node_number = int(node_number)
+        if not 1 <= node_number <= 64:
+            raise ValueError("node_number must be between 1 and 64, got {}".format(node_number))
+        self.write("tsplink.node = {}".format(node_number))
+
     def tsp_startup(self, restart=False):
         """ Ensures that the TSP network is available.
 
