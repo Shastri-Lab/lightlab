@@ -59,6 +59,5 @@ for _, modname, _ in pkgutil.walk_packages(path=__path__,  # noqa
 
 # Disable tests for the following packages
 experimental_instruments = [
-    'Aragon_BOSA_400_Queens',
     'Lakeshore_Model336',
 ]
