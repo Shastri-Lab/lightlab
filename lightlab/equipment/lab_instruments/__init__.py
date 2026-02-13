@@ -3,7 +3,6 @@ from ..visa_bases import VISAInstrumentDriver
 # instruments that are not VISA instruments
 from .Qontrol_Q8i_USB import Qontrol_Q8i_USB
 from .IMEBuild_SMU_v4 import IMEBuild_SMU
-from .Aragon_BOSA_400_Ether import Aragon_BOSA_400_Ether
 from .EMCORE_microITLA_LS import EMCORE_microITLA_LS
 from .Hantek_HDG6202B import HantekAWG
 from .Keysight_86100D_Oscope import Keysight_86100D_Oscope
@@ -42,8 +41,6 @@ for _, modname, _ in pkgutil.walk_packages(path=__path__,  # noqa
             if Qontrol_Q8i_USB in mro:
                 globals()[k] = v
             if IMEBuild_SMU in mro:
-                globals()[k] = v
-            if Aragon_BOSA_400_Ether in mro:
                 globals()[k] = v
             if EMCORE_microITLA_LS in mro:
                 globals()[k] = v

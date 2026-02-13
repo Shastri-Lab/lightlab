@@ -1,6 +1,7 @@
 from . import VISAInstrumentDriver
 from lightlab.laboratory.instruments import OpticalSpectrumAnalyzer
 
+import socket
 import numpy as np
 from lightlab.util.data import Spectrum
 from lightlab import visalogger as logger
@@ -17,10 +18,13 @@ _CA_POLARIZATIONS = ('1', '2', 'INDEP', 'SIMUL')
 
 
 class Aragon_BOSA_400(VISAInstrumentDriver):
-    """Aragon BOSA 400 Optical Spectrum Analyzer (GPIB/VISA).
+    """Aragon BOSA 400 Optical Spectrum Analyzer.
 
     Supports BOSA, TLS, and CA applications via standard SCPI commands.
-    Uses the VISAInstrumentDriver base class for session management.
+
+    Transport is auto-detected from the address format:
+      - ``GPIB0::1::INSTR`` → VISA/GPIB mode (via VISAInstrumentDriver)
+      - ``TCPIP0::192.168.1.100::5025::SOCKET`` → raw TCP socket mode
 
     Usage: :ref:`/ipynbs/Hardware/OpticalSpectrumAnalyzer.ipynb`
     """
@@ -32,8 +36,132 @@ class Aragon_BOSA_400(VISAInstrumentDriver):
     _currApp = None
 
     def __init__(self, name='BOSA 400 OSA', address=None, **kwargs):
-        kwargs['tempSess'] = kwargs.pop('tempSess', True)
+        # Detect TCP mode from address
+        self._use_tcp = False
+        self._tcp_host = None
+        self._tcp_port = None
+        self._tcp_socket = None
+        self._tcp_started = False
+
+        if address is not None and 'TCPIP' in address.upper():
+            self._use_tcp = True
+            # Parse VISA-style TCP address: TCPIP0::host::port::SOCKET
+            parts = address.split('::')
+            self._tcp_host = parts[1]
+            self._tcp_port = int(parts[2])
+            # Default to persistent connection for TCP
+            kwargs['tempSess'] = kwargs.pop('tempSess', False)
+        else:
+            # Default to temporary sessions for VISA
+            kwargs['tempSess'] = kwargs.pop('tempSess', True)
+
         super().__init__(name=name, address=address, **kwargs)
+
+    # ------------------------------------------------------------------
+    # TCP helpers
+    # ------------------------------------------------------------------
+
+    def _ensure_tcp_connected(self):
+        """Create and connect the TCP socket if not already connected."""
+        if self._tcp_socket is not None:
+            return
+        self._tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._tcp_socket.settimeout(self.MAGIC_TIMEOUT)
+        self._tcp_socket.connect((self._tcp_host, self._tcp_port))
+        logger.debug('TCP connected to %s:%s', self._tcp_host, self._tcp_port)
+
+    def _tcp_disconnect(self):
+        """Close the TCP socket if open."""
+        if self._tcp_socket is not None:
+            try:
+                self._tcp_socket.close()
+            except OSError:
+                pass
+            self._tcp_socket = None
+            logger.debug('TCP disconnected from %s:%s',
+                         self._tcp_host, self._tcp_port)
+
+    def _tcp_recv(self):
+        """Read from the TCP socket until a newline is received.
+
+        Returns:
+            str: the received data with trailing ``\\r\\n`` stripped.
+        """
+        buf = ''
+        while True:
+            data = self._tcp_socket.recv(19200)
+            buf += data.decode()
+            if '\n' in buf:
+                break
+        return buf.rstrip('\r\n')
+
+    # ------------------------------------------------------------------
+    # Session lifecycle overrides
+    # ------------------------------------------------------------------
+
+    def open(self):
+        if self._use_tcp:
+            self._ensure_tcp_connected()
+            if not self._tcp_started:
+                self._tcp_started = True
+                self.startup()
+                # Re-ensure connection in case startup triggered a close
+                self._ensure_tcp_connected()
+        else:
+            super().open()
+
+    def close(self):
+        if self._use_tcp:
+            self._tcp_disconnect()
+            self._tcp_started = False
+        else:
+            super().close()
+
+    # ------------------------------------------------------------------
+    # Communication overrides
+    # ------------------------------------------------------------------
+
+    def write(self, writeStr):
+        if self._use_tcp:
+            try:
+                self._ensure_tcp_connected()
+                self._tcp_socket.sendall((writeStr + '\r\n').encode())
+                logger.debug('%s:%s - W - %s',
+                             self._tcp_host, self._tcp_port, writeStr)
+                # The instrument replies OK\r\n to write commands; consume it
+                confirm = self._tcp_recv()
+                if confirm != 'OK':
+                    logger.warning('Unexpected write response for %r: %r',
+                                   writeStr, confirm)
+            finally:
+                if self.tempSess:
+                    self._tcp_disconnect()
+        else:
+            self._session_object.write(writeStr)
+
+    def query(self, queryStr, withTimeout=None):
+        if self._use_tcp:
+            try:
+                self._ensure_tcp_connected()
+                if withTimeout is not None:
+                    self._tcp_socket.settimeout(withTimeout)
+                self._tcp_socket.sendall((queryStr + '\r\n').encode())
+                logger.debug('%s:%s - Q - %s',
+                             self._tcp_host, self._tcp_port, queryStr)
+                retStr = self._tcp_recv()
+                logger.debug('Query Read - %s', retStr)
+                if withTimeout is not None:
+                    self._tcp_socket.settimeout(self.MAGIC_TIMEOUT)
+            finally:
+                if self.tempSess:
+                    self._tcp_disconnect()
+            return retStr
+        else:
+            return self._session_object.query(queryStr, withTimeout=withTimeout)
+
+    # ------------------------------------------------------------------
+    # Instrument methods
+    # ------------------------------------------------------------------
 
     def startup(self):
         idn = self.query('*IDN?')
@@ -49,7 +177,7 @@ class Aragon_BOSA_400(VISAInstrumentDriver):
 
     def start(self):
         self._currApp = self.query('INST:STAT:MODE?').strip()
-        if self._currAp == 'TLS':
+        if self._currApp == 'TLS':
             self.write('SENS:SWITCH ON')
         else:
             self.write('INST:STAT:RUN 1')
@@ -106,14 +234,21 @@ class Aragon_BOSA_400(VISAInstrumentDriver):
             list of float: interleaved wavelength and power values
         """
         self.write('FORM ASCII')
-        return self.query_ascii_values('TRAC?', separator=',')
+        raw = self.query('TRAC?')
+        return [float(x) for x in raw.split(',')]
 
     def _read_trace_real(self):
         """Read trace data in REAL (binary double) format.
 
+        Only supported in VISA/GPIB mode.
+
         Returns:
             list of [wavelength, power] pairs
         """
+        if self._use_tcp:
+            raise NotImplementedError(
+                "REAL trace format is not supported over TCP. Use form='ASCII'.")
+
         self.write('FORM REAL')
         num_points = int(self.query('TRACE:DATA:COUNT?'))
         msg_length = num_points * 2 * 8  # 2 doubles per point, 8 bytes each
@@ -138,7 +273,8 @@ class Aragon_BOSA_400(VISAInstrumentDriver):
         """Acquire a spectrum from the OSA.
 
         Args:
-            form: 'ASCII' or 'REAL' (default 'REAL')
+            form: 'ASCII' or 'REAL' (default 'REAL').
+                  TCP connections only support 'ASCII'.
 
         Returns:
             Spectrum: wavelength (nm) vs power (dBm)
