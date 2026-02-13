@@ -7,6 +7,7 @@ from .Aragon_BOSA_400_Ether import Aragon_BOSA_400_Ether
 from .EMCORE_microITLA_LS import EMCORE_microITLA_LS
 from .Hantek_HDG6202B import HantekAWG
 from .Keysight_86100D_Oscope import Keysight_86100D_Oscope
+from .greymatter import GreyMatter
 
 # list of instruments to skip all together
 SKIP_INSTRUMENTS = [
@@ -49,6 +50,8 @@ for _, modname, _ in pkgutil.walk_packages(path=__path__,  # noqa
             if HantekAWG in mro:
                 globals()[k] = v
             if Keysight_86100D_Oscope in mro:
+                globals()[k] = v
+            if GreyMatter in mro:
                 globals()[k] = v
             
             # if k == 'IMEBuild_SMU' or k == 'Qontrol_Q8i': #TODO: not sure if this works how I want
