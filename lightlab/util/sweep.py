@@ -233,7 +233,7 @@ class NdSweeper(Sweeper):
                     else:
                         x = actuObj.domain[index[iDim]]
                         pointData[actuKey] = x
-                    if iDim == self.actuDims - 1 or index[iDim + 1] == 0 or actuObj.doOnEveryPoint:
+                    if iDim == self.actuDims - 1 or all(index[j] == 0 for j in range(iDim + 1, len(index))) or actuObj.doOnEveryPoint:
                         y = actuObj.function(x)  # The actual function call occurs here
                         if y is not None:
                             pointData[actuKey + '-return'] = y
