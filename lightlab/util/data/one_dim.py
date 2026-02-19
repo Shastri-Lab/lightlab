@@ -53,7 +53,7 @@ def prbs_pattern(polynomial, seed, length=None):
 
     from itertools import islice
     prbs_pattern = list(islice(iter(prbs_generator(polynomial, seed)), length))
-    return ~np.array(prbs_pattern, dtype=np.bool)
+    return ~np.array(prbs_pattern, dtype=bool)
 
 
 # Standard PRBS characteristic polynomials for prbs_pattern().
