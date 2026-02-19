@@ -1043,14 +1043,120 @@ class Waveform(MeasuredFunction):
 
         Use the unit attribute to set units different than Volts.
 
-        Has class methods for generating common time-domain signals
+        Has class methods for generating common time-domain signals.
+
+        Supports optional statistical envelopes (min/max/std) for representing
+        ensemble measurements. Use :meth:`fromEnsemble` to build from multiple waveforms.
     '''
 
     unit = None
 
-    def __init__(self, t, v, unit='V', unsafe=False):
+    def __init__(self, t, v, unit='V', unsafe=False,
+                 min_envelope=None, max_envelope=None,
+                 std_envelope=None, n_samples=None):
         super().__init__(t, v, unsafe=unsafe)
         self.unit = unit
+        self._min_envelope = np.asarray(min_envelope) if min_envelope is not None else None
+        self._max_envelope = np.asarray(max_envelope) if max_envelope is not None else None
+        self._std_envelope = np.asarray(std_envelope) if std_envelope is not None else None
+        self._n_samples = n_samples
+        self._raw_bundle = None
+
+    @property
+    def has_statistics(self):
+        ''' True if any envelope data is present and valid. '''
+        return any(self._check_envelope(e) is not None
+                   for e in (self._min_envelope, self._max_envelope, self._std_envelope))
+
+    def _check_envelope(self, arr):
+        ''' Return arr if it matches current abscissa length, else None. '''
+        if arr is not None and len(arr) == len(self.absc):
+            return arr
+        return None
+
+    @property
+    def mean_envelope(self):
+        ''' The mean waveform (alias for ordi). '''
+        return self.ordi
+
+    @property
+    def min_envelope(self):
+        return self._check_envelope(self._min_envelope)
+
+    @property
+    def max_envelope(self):
+        return self._check_envelope(self._max_envelope)
+
+    @property
+    def std_envelope(self):
+        return self._check_envelope(self._std_envelope)
+
+    @property
+    def n_samples(self):
+        return self._n_samples
+
+    @property
+    def raw_bundle(self):
+        return self._raw_bundle
+
+    @classmethod
+    def fromEnsemble(cls, waveforms, keep_raw=True, unit='V'):
+        ''' Build a Waveform with statistics from an ensemble of waveforms.
+
+            Args:
+                waveforms: list of Waveform (or MeasuredFunction), or a FunctionBundle
+                keep_raw (bool): if True, store the raw bundle for later access
+                unit (str): unit label for the resulting Waveform
+
+            Returns:
+                Waveform: with mean as ordi and min/max/std envelopes populated
+        '''
+        from .two_dim import FunctionBundle
+        if isinstance(waveforms, FunctionBundle):
+            bundle = waveforms
+        else:
+            bundle = FunctionBundle(list(waveforms))
+
+        mean_ordi = np.mean(bundle.ordiMat, axis=0).A1
+        min_ordi = np.min(bundle.ordiMat, axis=0).A1
+        max_ordi = np.max(bundle.ordiMat, axis=0).A1
+        std_ordi = np.std(np.asarray(bundle.ordiMat), axis=0).flatten()
+
+        obj = cls(bundle.absc, mean_ordi, unit=unit,
+                  min_envelope=min_ordi, max_envelope=max_ordi,
+                  std_envelope=std_ordi, n_samples=bundle.nDims)
+        if keep_raw:
+            obj._raw_bundle = bundle
+        return obj
+
+    def simplePlot(self, *args, livePlot=False, show_envelope=True,
+                   envelope_alpha=0.2, envelope_style='minmax', **kwargs):
+        ''' Plot the waveform, optionally with shaded envelope.
+
+            Args:
+                show_envelope (bool): draw min/max or std shading if statistics are present
+                envelope_alpha (float): transparency of the shaded region
+                envelope_style (str): 'minmax' or 'std'
+        '''
+        curve = super().simplePlot(*args, livePlot=False, **kwargs)
+        ax = plt.gca()
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('Amplitude ({})'.format(self.unit))
+
+        if show_envelope and self.has_statistics and curve:
+            color = curve[0].get_color()
+            if envelope_style == 'minmax' and self.min_envelope is not None and self.max_envelope is not None:
+                ax.fill_between(self.absc, self.min_envelope, self.max_envelope,
+                                color=color, alpha=envelope_alpha)
+            elif envelope_style == 'std' and self.std_envelope is not None:
+                ax.fill_between(self.absc, self.ordi - self.std_envelope,
+                                self.ordi + self.std_envelope,
+                                color=color, alpha=envelope_alpha)
+
+        if livePlot:
+            display.display(plt.gcf())
+            display.clear_output(wait=True)
+        return curve
 
     @classmethod
     def pulse(cls, tArr, tOn, tOff):
