@@ -56,6 +56,19 @@ def prbs_pattern(polynomial, seed, length=None):
     return ~np.array(prbs_pattern, dtype=np.bool)
 
 
+# Standard PRBS characteristic polynomials for prbs_pattern().
+# Derived from ITU-T polynomials of the form x^N + x^k + 1.
+# Encoding: (1 << N) | (1 << (k-1)) | 1
+_PRBS_POLYNOMIALS = {
+    7:  (1 << 7)  | (1 << 5)  | 1,  # x^7 + x^6 + 1
+    9:  (1 << 9)  | (1 << 4)  | 1,  # x^9 + x^5 + 1
+    11: (1 << 11) | (1 << 8)  | 1,  # x^11 + x^9 + 1
+    15: (1 << 15) | (1 << 13) | 1,  # x^15 + x^14 + 1
+    23: (1 << 23) | (1 << 17) | 1,  # x^23 + x^18 + 1
+    31: (1 << 31) | (1 << 27) | 1,  # x^31 + x^28 + 1
+}
+
+
 class MeasuredFunction(object):  # pylint: disable=eq-without-hash
     ''' Array of x,y points.
         This is the workhorse class of ``lightlab`` data structures.
@@ -1170,3 +1183,78 @@ class Waveform(MeasuredFunction):
         vForm = np.random.randn(len(tArr))
         firstRms = rms(vForm)
         return cls(tArr, vForm * np.sqrt(rmsPow / firstRms))
+
+    @classmethod
+    def nrz(cls, order=7, baud_rate=1e9, n_symbols=None, samples_per_symbol=64):
+        ''' Generate an NRZ (Non-Return-to-Zero) PRBS waveform.
+
+            Args:
+                order (int): PRBS order (7, 9, 11, 15, 23, or 31)
+                baud_rate (float): symbol rate in Hz
+                n_symbols (int): number of bits. Defaults to 2^order - 1 (one full period)
+                samples_per_symbol (int): time-domain samples per bit
+
+            Returns:
+                Waveform: NRZ waveform with values in {0, 1}
+        '''
+        if order not in _PRBS_POLYNOMIALS:
+            raise ValueError('Unsupported PRBS order {}. '
+                             'Supported: {}'.format(order, sorted(_PRBS_POLYNOMIALS)))
+        polynomial = _PRBS_POLYNOMIALS[order]
+        seed = (1 << order) - 1
+        bits = prbs_pattern(polynomial, seed, length=n_symbols)
+
+        v = np.repeat(bits.astype(float), samples_per_symbol)
+        dt = 1.0 / (baud_rate * samples_per_symbol)
+        t = np.arange(len(v)) * dt
+        return cls(t, v, unit='a.u.')
+
+    @classmethod
+    def pam(cls, n_levels=4, order=7, baud_rate=1e9, n_symbols=None, samples_per_symbol=64):
+        ''' Generate a PAM-N (Pulse Amplitude Modulation) PRBS waveform.
+
+            Groups PRBS bits into log2(n_levels) bits per symbol, mapping
+            each group to one of n_levels equally-spaced amplitude levels.
+
+            Args:
+                n_levels (int): number of amplitude levels (must be a power of 2, e.g. 4 for PAM-4)
+                order (int): PRBS order (7, 9, 11, 15, 23, or 31)
+                baud_rate (float): symbol rate in Hz
+                n_symbols (int): number of PAM symbols. Defaults to (2^order - 1) // bits_per_symbol
+                samples_per_symbol (int): time-domain samples per symbol
+
+            Returns:
+                Waveform: PAM-N waveform with values normalized to [0, 1]
+        '''
+        bits_per_symbol = int(np.log2(n_levels))
+        if 2 ** bits_per_symbol != n_levels:
+            raise ValueError('n_levels must be a power of 2, got {}'.format(n_levels))
+        if order not in _PRBS_POLYNOMIALS:
+            raise ValueError('Unsupported PRBS order {}. '
+                             'Supported: {}'.format(order, sorted(_PRBS_POLYNOMIALS)))
+
+        polynomial = _PRBS_POLYNOMIALS[order]
+        seed = (1 << order) - 1
+
+        if n_symbols is None:
+            n_bits = 2 ** order - 1
+        else:
+            n_bits = n_symbols * bits_per_symbol
+        bits = prbs_pattern(polynomial, seed, length=n_bits)
+
+        # Trim to a multiple of bits_per_symbol
+        n_bits_used = (len(bits) // bits_per_symbol) * bits_per_symbol
+        bits = bits[:n_bits_used]
+
+        # Group bits into symbols and compute integer level
+        bit_groups = bits.reshape(-1, bits_per_symbol)
+        powers = 2 ** np.arange(bits_per_symbol)[::-1]
+        symbols = bit_groups.astype(int) @ powers
+
+        # Normalize to [0, 1]
+        levels = symbols / (n_levels - 1)
+
+        v = np.repeat(levels, samples_per_symbol)
+        dt = 1.0 / (baud_rate * samples_per_symbol)
+        t = np.arange(len(v)) * dt
+        return cls(t, v, unit='a.u.')
