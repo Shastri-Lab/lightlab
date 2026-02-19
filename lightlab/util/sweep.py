@@ -177,7 +177,9 @@ class NdSweeper(Sweeper):
         self.monitorOptions = {'livePlot': False, 'plotEvery': 1,
                                'stdoutPrint': True, 'runServer': False}
         self.plotOptions = {'plType': 'curves', 'xKey': None, 'yKey': None, 'axArr': None,
-                            'cmap-surf': matplotlib.cm.inferno, 'cmap-curves': matplotlib.cm.viridis}  # pylint: disable=no-member
+                            'cmap-surf': matplotlib.cm.inferno, 'cmap-curves': matplotlib.cm.viridis,
+                            'cmap-overlay': matplotlib.cm.viridis, 'overlay-envelope': True,
+                            'overlay-envelope-alpha': 0.15}  # pylint: disable=no-member
 
     @classmethod
     def repeater(cls, nTrials):
@@ -475,7 +477,11 @@ class NdSweeper(Sweeper):
         fullData = self.data if tempData is None else tempData
         plotDims = list(fullData.values())[0].ndim if fullData is not None else self.actuDims
         assertValidPlotType(self.plotOptions['plType'], plotDims, type(self))
-    
+
+        # overlay dispatch — handles non-scalar measurement data
+        if self.plotOptions['plType'] == 'overlay':
+            return self._plot_overlay(fullData, plotDims, index=index, axArr=axArr)
+
         # slicer normalization
         if slicer is None:
             slicer = (slice(None),) * plotDims
@@ -684,6 +690,108 @@ class NdSweeper(Sweeper):
     
                 ax.set_ylabel(actuationKeys[0])
     
+        return axArr
+
+    def _plot_overlay(self, fullData, plotDims, index=None, axArr=None):
+        ''' Plot non-scalar (MeasuredFunction-like) data as overlaid curves colored by actuation value.
+
+            Each measurement key that holds objects with a ``simplePlot`` method gets its own subplot column.
+            Curves are colored by the innermost actuation domain value.
+        '''
+        actuationKeys = list(self.actuate.keys())
+
+        # find overlay-eligible measurement keys (objects with simplePlot)
+        overlayKeys = []
+        for datKey, datVal in fullData.items():
+            if datKey in actuationKeys:
+                continue
+            sample = datVal.flat[0]
+            if sample is not None and hasattr(sample, 'simplePlot'):
+                overlayKeys.append(datKey)
+
+        if not overlayKeys:
+            raise ValueError("No plottable (non-scalar) measurement keys found for overlay plot.")
+
+        # color-by key: innermost actuation with a domain
+        colorKey = actuationKeys[-1]
+        colorDomain = self.actuate[colorKey].domain
+
+        cmap = self.plotOptions.get('cmap-overlay', matplotlib.cm.viridis)
+        show_envelope = self.plotOptions.get('overlay-envelope', True)
+        env_alpha = self.plotOptions.get('overlay-envelope-alpha', 0.15)
+
+        vmin, vmax = float(colorDomain[0]), float(colorDomain[-1])
+        norm = plt.Normalize(vmin=vmin, vmax=vmax)
+
+        ncols = len(overlayKeys)
+
+        # create or reuse axes
+        if axArr is None:
+            axArr = self.plotOptions.get('axArr', None)
+        if axArr is None:
+            _, axArr = plt.subplots(nrows=1, ncols=ncols, figsize=(5 * ncols, 4),
+                                    squeeze=False)
+        axArr = np.atleast_2d(np.asarray(axArr))
+
+        # cache init/reset
+        if not hasattr(self, '_plot_cache') or index is None or np.all(np.array(index) == 0):
+            self._plot_cache = {'overlay': {'n_plotted': {id(ax): 0 for ax in axArr.flat},
+                                            'colorbar': None}}
+
+        cache = self._plot_cache['overlay']
+
+        # iterate over all data points up to current index
+        for iCol, oKey in enumerate(overlayKeys):
+            ax = axArr[0, iCol] if iCol < axArr.shape[1] else axArr.flat[iCol]
+
+            n_already = cache['n_plotted'].get(id(ax), 0)
+            datArr = fullData[oKey]
+
+            # flatten and iterate
+            flat_indices = list(np.ndindex(datArr.shape))
+            for flat_i, idx in enumerate(flat_indices):
+                # skip already-plotted points
+                if flat_i < n_already:
+                    continue
+
+                # during live plot, stop at current index
+                if index is not None:
+                    flat_current = np.ravel_multi_index(index, datArr.shape)
+                    if flat_i > flat_current:
+                        break
+
+                mf = datArr[idx]
+                if mf is None:
+                    continue
+
+                # color from innermost actuation value
+                actu_idx = idx[-1] if len(idx) > 0 else 0
+                color_val = float(colorDomain[actu_idx])
+                color = cmap(norm(color_val))
+
+                plt.sca(ax)
+                # use envelope support if available (Waveform), otherwise plain plot
+                if hasattr(mf, 'has_statistics') and show_envelope:
+                    mf.simplePlot(color=color, livePlot=False,
+                                  show_envelope=True, envelope_alpha=env_alpha)
+                else:
+                    mf.simplePlot(color=color, livePlot=False)
+
+            # update plotted count
+            if index is not None:
+                cache['n_plotted'][id(ax)] = np.ravel_multi_index(index, datArr.shape) + 1
+            else:
+                cache['n_plotted'][id(ax)] = len(flat_indices)
+
+            ax.set_title(oKey)
+
+        # colorbar — add once
+        if cache['colorbar'] is None:
+            sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+            sm.set_array([])
+            last_ax = axArr.flat[-1]
+            cache['colorbar'] = plt.gcf().colorbar(sm, ax=last_ax, label=colorKey)
+
         return axArr
 
     def saveObj(self, savefile=None):
@@ -1325,6 +1433,7 @@ def plotCmdCtrl(sweepData, index=None, ax=None, interactive=False):
 pTypes = {}
 pTypes['curves'] = ({1, 2}, {NdSweeper.__name__, CommandControlSweeper.__name__})
 pTypes['surf'] = ({2}, {NdSweeper.__name__})
+pTypes['overlay'] = ({1, 2}, {NdSweeper.__name__})
 pTypes['cmdErr'] = ({1, 2}, {CommandControlSweeper.__name__})
 
 
