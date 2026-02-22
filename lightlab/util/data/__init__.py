@@ -14,7 +14,7 @@ from .function_inversion import interpInverse, descend  # noqa
 
 from .peaks import ResonanceFeature, PeakFinderError, findPeaks  # noqa
 
-from .one_dim import MeasuredFunction, Spectrum, Waveform  # noqa
+from .one_dim import MeasuredFunction, Spectrum, SpectrumGHz, Waveform  # noqa
 
 from .two_dim import (FunctionBundle, FunctionalBasis,  # noqa
                       MeasuredSurface, Spectrogram, MeasuredErrorField)  # noqa

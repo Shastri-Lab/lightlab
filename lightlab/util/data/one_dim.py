@@ -11,6 +11,9 @@ from .peaks import findPeaks, ResonanceFeature
 from .basic import rms
 from .function_inversion import interpInverse
 
+# Speed of light in nm*GHz (c = 299792458 m/s → nm·GHz)
+_C_NM_GHZ = 299_792_458
+
 
 def prbs_generator(characteristic, state):
     ''' Generator of PRBS bits.
@@ -167,20 +170,24 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
         raise TypeError("{} is not iterable".format(self.__class__.__qualname__))
 
     def __getitem__(self, sl):
-        ''' Slice this function.
+        ''' Slice or index this function.
 
             Args:
-                sl (int, slice): which indeces to pick out
+                sl (int, slice, ndarray): integer, slice, boolean mask, or integer array
 
             Returns:
                 (MeasuredFunction/<childClass>): sliced version
         '''
-        if type(sl) not in [int, slice]:
-            raise ValueError('MeasuredFunction [] only works with integers and slices. ' +
-                             'Got ' + str(sl) + ' (' + str(type(sl)) + ').')
+        if isinstance(sl, np.ndarray) and sl.dtype == bool:
+            pass  # boolean mask indexing
+        elif isinstance(sl, np.ndarray) and np.issubdtype(sl.dtype, np.integer):
+            pass  # integer array indexing
+        elif type(sl) not in [int, slice]:
+            raise ValueError('MeasuredFunction [] only works with integers, slices, '
+                             'and numpy arrays. Got ' + str(type(sl)) + '.')
         newAbsc = self.absc[sl]
         newOrdi = self.ordi[sl]
-        return self.__newOfSameSubclass(newAbsc, newOrdi)
+        return self._newOfSameSubclass(newAbsc, newOrdi)
 
     def getData(self):
         ''' Gives a tuple of the enclosed array data.
@@ -198,7 +205,7 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
             Returns:
                 (MeasuredFunction/<childClass>): new object with same properties
         '''
-        return self.__newOfSameSubclass(self.absc, self.ordi)
+        return self._newOfSameSubclass(self.absc, self.ordi)
 
     def save(self, savefile):
         io.saveMat(savefile, {'absc': self.absc, 'ordi': self.ordi})
@@ -232,7 +239,7 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
 
     # Simple data handling operations
 
-    def __newOfSameSubclass(self, newAbsc, newOrdi):
+    def _newOfSameSubclass(self, newAbsc, newOrdi):
         ''' Helper functions that ensures proper inheritance of other methods.
 
             Returns a new object of the same type and
@@ -258,7 +265,7 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
         ''' Returns a new MeasuredFunction sampled at given points.
         '''
         new_ordi = self.__call__(newAbscissa)
-        return self.__newOfSameSubclass(newAbscissa, new_ordi)
+        return self._newOfSameSubclass(newAbscissa, new_ordi)
 
     def getSpan(self):
         ''' The span of the domain
@@ -324,9 +331,8 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
         if min_segment <= absc_span[0] and max_segment >= absc_span[1]:
             # do nothing
             return self.copy()
-        dx = np.mean(np.diff(np.sort(self.absc)))
-        newAbsc = np.arange(min_segment, max_segment, dx)
-        return self.__newOfSameSubclass(newAbsc, self(newAbsc))
+        mask = (self.absc >= min_segment) & (self.absc <= max_segment)
+        return self._newOfSameSubclass(self.absc[mask], self.ordi[mask])
 
     def clip(self, amin, amax):
         ''' Clip ordinate to min/max range
@@ -338,7 +344,7 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
             Returns:
                 MeasuredFunction: new object
         '''
-        return self.__newOfSameSubclass(self.absc, np.clip(self.ordi, amin, amax))
+        return self._newOfSameSubclass(self.absc, np.clip(self.ordi, amin, amax))
 
     def shift(self, shiftBy):
         ''' Shift abscissa. Good for biasing wavelengths.
@@ -349,7 +355,7 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
             Returns:
                 MeasuredFunction: new object
         '''
-        return self.__newOfSameSubclass(self.absc + shiftBy, self.ordi)
+        return self._newOfSameSubclass(self.absc + shiftBy, self.ordi)
 
     def flip(self):
         ''' Flips the abscissa, BUT DOES NOTHING the ordinate.
@@ -360,7 +366,7 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
             Returns:
                 MeasuredFunction: new object
         '''
-        return self.__newOfSameSubclass(self.absc[::-1], self.ordi)
+        return self._newOfSameSubclass(self.absc[::-1], self.ordi)
 
     def reverse(self):
         ''' Flips the ordinate, keeping abscissa in order
@@ -368,7 +374,7 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
             Returns:
                 MeasuredFunction: new object
         '''
-        return self.__newOfSameSubclass(self.absc, self.ordi[::-1])
+        return self._newOfSameSubclass(self.absc, self.ordi[::-1])
 
     def debias(self):
         ''' Removes mean from the function
@@ -377,7 +383,7 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
                 MeasuredFunction: new object
         '''
         bias = np.mean(self.ordi)
-        return self.__newOfSameSubclass(self.absc, self.ordi - bias)
+        return self._newOfSameSubclass(self.absc, self.ordi - bias)
 
     def unitRms(self):
         ''' Returns function with unit RMS or power
@@ -407,7 +413,7 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
                 MeasuredFunction: new object
         '''
         newAbsc = np.linspace(*self.getSpan(), int(nsamp))
-        return self.__newOfSameSubclass(newAbsc, self(newAbsc))
+        return self._newOfSameSubclass(newAbsc, self(newAbsc))
 
     def uniformlySample(self):
         ''' Makes sure samples are uniform
@@ -431,11 +437,7 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
                 None: it modifies this object
         '''
         x, y = xyPoint
-        for i in range(len(self)):
-            if x < self.absc[i]:
-                break
-        else:
-            i = len(self)
+        i = np.searchsorted(self.absc, x)
         self.absc = np.insert(self.absc, i, x)
         self.ordi = np.insert(self.ordi, i, y)
 
@@ -466,11 +468,14 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
                                     other_ordi_norm,
                                     mode="full", method="direct")
         offset_abscissa = np.arange(-N + 1, N, 1) * dx
-        return self.__newOfSameSubclass(offset_abscissa, correlated_ordi)
+        return self._newOfSameSubclass(offset_abscissa, correlated_ordi)
 
     def lowPass(self, windowWidth=None, mode=None):
+        import warnings
+        warnings.warn("lowPass is deprecated. Use lowPassButterworth or movingAverage instead.",
+                      DeprecationWarning, stacklevel=2)
         if mode is not None:
-            logger.warn("lowPass was renamed to movingAverage. Now it is an actual Butterworth low-pass filter.")
+            logger.warning("lowPass was renamed to movingAverage. Now it is an actual Butterworth low-pass filter.")
         return self.lowPassButterworth(1 / windowWidth)
 
     def movingAverage(self, windowWidth=None, mode='valid'):
@@ -507,7 +512,7 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
             newAbsc = self.absc.copy()
             newOrdi = self.ordi.copy()
             newOrdi[invalidIndeces:-invalidIndeces] = np.convolve(filt, self.ordi, mode='valid')
-        return self.__newOfSameSubclass(newAbsc, newOrdi)
+        return self._newOfSameSubclass(newAbsc, newOrdi)
 
     def butterworthFilter(self, fc, order, btype):
         ''' Applies a Butterworth filter to the signal.
@@ -600,7 +605,7 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
         '''
         nonNullInds = np.logical_or(self.absc < min(segment), self.absc > max(segment))
         newAbsc = self.absc[nonNullInds]
-        return self.__newOfSameSubclass(newAbsc, self(newAbsc))
+        return self._newOfSameSubclass(newAbsc, self(newAbsc))
 
     def splice(self, other, segment=None):
         ''' Returns a Spectrum that is this one,
@@ -624,7 +629,7 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
         spliceInds = np.logical_and(self.absc > min(segment), self.absc < max(segment))
         newOrdi = self.ordi.copy()
         newOrdi[spliceInds] = other(self.absc[spliceInds])
-        return self.__newOfSameSubclass(self.absc, newOrdi)
+        return self._newOfSameSubclass(self.absc, newOrdi)
 
     def invert(self, yVals, directionToDescend=None):
         ''' Descends down the function until yVal is reached in ordi. Returns the absc value
@@ -689,12 +694,19 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
         variance = np.mean(np.power(self.ordi - mean, 2))
         if order == 2:
             return variance
+        std = np.sqrt(variance)
+        if order == 3:
+            skew = np.mean(np.power(self.ordi - mean, 3))
+            skew /= std ** 3
+            return skew
         if order == 4:
             kurtosis = np.mean(np.power(self.ordi - mean, 4))
             kurtosis /= variance ** 2
             if relativeGauss:
                 kurtosis -= 3
             return kurtosis
+        # Generic fallback for higher orders
+        return np.mean(np.power(self.ordi - mean, order)) / std ** order
 
     def findResonanceFeatures(self, **kwargs):
         r''' A convenient wrapper for :func:`~lightlab.util.data.peaks.findPeaks`
@@ -731,7 +743,7 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
 
     # Mathematics
 
-    def __binMathHelper(self, other):
+    def _binMathHelper(self, other):
         ''' returns the new abcissa and a tuple of arrays: the ordinates to operate on
         '''
         try:
@@ -815,24 +827,24 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
     def __sub__(self, other):
         ''' Returns the subtraction of the two functions, in the domain of the shortest abscissa object.
         The other object can also be a scalar '''
-        newAbsc, ords = self.__binMathHelper(other)
-        return self.__newOfSameSubclass(newAbsc, ords[0] - ords[1])
+        newAbsc, ords = self._binMathHelper(other)
+        return self._newOfSameSubclass(newAbsc, ords[0] - ords[1])
 
     def __rsub__(self, other):
-        newAbsc, ords = self.__binMathHelper(other)
-        return self.__newOfSameSubclass(newAbsc, ords[1] - ords[0])
+        newAbsc, ords = self._binMathHelper(other)
+        return self._newOfSameSubclass(newAbsc, ords[1] - ords[0])
 
     def __add__(self, other):
-        ''' Returns the subtraction of the two functions, in the domain of the shortest abscissa object.
+        ''' Returns the addition of the two functions, in the domain of the shortest abscissa object.
         The other object can also be a scalar '''
-        newAbsc, ords = self.__binMathHelper(other)
-        return self.__newOfSameSubclass(newAbsc, ords[0] + ords[1])
+        newAbsc, ords = self._binMathHelper(other)
+        return self._newOfSameSubclass(newAbsc, ords[0] + ords[1])
 
     def __abs__(self):
         ''' Returns a new object where the abscissa contains the absolute value of the old one.
         '''
         abs_ordi = np.abs(self.ordi)
-        return self.__newOfSameSubclass(self.absc, abs_ordi)
+        return self._newOfSameSubclass(self.absc, abs_ordi)
 
     def __radd__(self, other):
         return self.__add__(other)
@@ -840,8 +852,8 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
     def __mul__(self, other):
         ''' Returns the product of the two functions, in the domain of the shortest abscissa object.
         The other object can also be a scalar '''
-        newAbsc, ords = self.__binMathHelper(other)
-        return self.__newOfSameSubclass(newAbsc, ords[0] * ords[1])
+        newAbsc, ords = self._binMathHelper(other)
+        return self._newOfSameSubclass(newAbsc, ords[0] * ords[1])
 
     def __pow__(self, power):
         ''' Returns the result of exponentiation. Can only exponentiate
@@ -855,13 +867,22 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
         except ValueError as err:
             raise ValueError("Invalid power {} (not a number)".format(power)) from err
 
-        return self.__newOfSameSubclass(absc, new_ordi)
+        return self._newOfSameSubclass(absc, new_ordi)
 
     def __rmul__(self, other):
         return self.__mul__(other)
 
     def __truediv__(self, other):
-        return self * other ** (-1)
+        newAbsc, ords = self._binMathHelper(other)
+        return self._newOfSameSubclass(newAbsc, ords[0] / ords[1])
+
+    def __rtruediv__(self, other):
+        newAbsc, ords = self._binMathHelper(other)
+        return self._newOfSameSubclass(newAbsc, ords[1] / ords[0])
+
+    def __neg__(self):
+        ''' Returns a new object with negated ordinate. '''
+        return self._newOfSameSubclass(self.absc, -self.ordi)
 
     def __eq__(self, other):
         if isinstance(self, type(other)):
@@ -873,6 +894,127 @@ class MeasuredFunction(object):  # pylint: disable=eq-without-hash
             return "{}({:d} pts)".format(self.__class__.__qualname__, len(self))
         except TypeError:  # len(self fails)
             return "{}({:f},{:f})".format(self.__class__.__qualname__, self.absc, self.ordi)
+
+    # Analysis methods
+
+    def fft(self):
+        ''' Single-sided FFT magnitude spectrum.
+
+            Uniformly resamples the function, computes the real FFT,
+            and returns the magnitude as a MeasuredFunction.
+
+            Returns:
+                MeasuredFunction: frequency vs magnitude
+        '''
+        uniform = self.uniformlySample()
+        dx = np.diff(uniform.absc[:2])[0]
+        N = len(uniform)
+        spectrum = np.fft.rfft(uniform.ordi)
+        freqs = np.fft.rfftfreq(N, d=dx)
+        magnitude = np.abs(spectrum) * 2.0 / N
+        magnitude[0] /= 2.0  # DC component not doubled
+        return MeasuredFunction(freqs, magnitude)
+
+    def psd(self, nperseg=None):
+        ''' Power spectral density via Welch's method.
+
+            Args:
+                nperseg (int): segment length for Welch. Defaults to len/8.
+
+            Returns:
+                MeasuredFunction: frequency vs power spectral density
+        '''
+        uniform = self.uniformlySample()
+        dx = np.diff(uniform.absc[:2])[0]
+        fs = 1.0 / dx
+        if nperseg is None:
+            nperseg = max(len(uniform) // 8, 8)
+        freqs, Pxx = signal.welch(uniform.ordi, fs=fs, nperseg=nperseg)
+        return MeasuredFunction(freqs, Pxx)
+
+    def integrate(self, segment=None):
+        ''' Numerical integration via the trapezoidal rule.
+
+            Args:
+                segment (list[float,float], optional): integration bounds.
+                    If None, integrates over the full domain.
+
+            Returns:
+                float: the integral value
+        '''
+        if segment is not None:
+            cropped = self.crop(segment)
+            return np.trapz(cropped.ordi, cropped.absc)
+        return np.trapz(self.ordi, self.absc)
+
+    def cumIntegrate(self):
+        ''' Cumulative trapezoidal integration.
+
+            Returns:
+                MeasuredFunction: cumulative integral
+        '''
+        from scipy.integrate import cumulative_trapezoid
+        cum = cumulative_trapezoid(self.ordi, self.absc, initial=0)
+        return self._newOfSameSubclass(self.absc, cum)
+
+    def derivative(self):
+        ''' Numerical differentiation using np.gradient.
+
+            Returns:
+                MeasuredFunction: the derivative
+        '''
+        dydx = np.gradient(self.ordi, self.absc)
+        return self._newOfSameSubclass(self.absc, dydx)
+
+    def zeroCrossings(self, level=0.0):
+        ''' Find abscissa values where the ordinate crosses a level.
+
+            Linearly interpolates between adjacent points that straddle
+            the level.
+
+            Args:
+                level (float): the threshold level
+
+            Returns:
+                ndarray: abscissa values of crossings
+        '''
+        shifted = self.ordi - level
+        sign_changes = np.where(np.diff(np.sign(shifted)))[0]
+        crossings = np.empty(len(sign_changes))
+        for i, idx in enumerate(sign_changes):
+            x0, x1 = self.absc[idx], self.absc[idx + 1]
+            y0, y1 = shifted[idx], shifted[idx + 1]
+            crossings[i] = x0 - y0 * (x1 - x0) / (y1 - y0)
+        return crossings
+
+    def estimateFrequency(self):
+        ''' Estimate the dominant frequency from zero crossings.
+
+            Each pair of consecutive zero crossings is half a period.
+
+            Returns:
+                float: estimated frequency
+        '''
+        crossings = self.zeroCrossings(level=np.mean(self.ordi))
+        if len(crossings) < 2:
+            return 0.0
+        half_periods = np.diff(crossings)
+        avg_period = 2.0 * np.mean(half_periods)
+        return 1.0 / avg_period
+
+    def histogram(self, bins='auto', density=False):
+        ''' Amplitude histogram of the ordinate.
+
+            Args:
+                bins: passed to np.histogram
+                density (bool): if True, normalize to a probability density
+
+            Returns:
+                MeasuredFunction: bin centers vs counts (or density)
+        '''
+        counts, bin_edges = np.histogram(self.ordi, bins=bins, density=density)
+        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2.0
+        return MeasuredFunction(bin_centers, counts.astype(float))
 
 
 class Spectrum(MeasuredFunction):
@@ -928,11 +1070,11 @@ class Spectrum(MeasuredFunction):
             clippedOrdi = np.clip(self.ordi, 1e-12, None)
             return type(self)(self.absc.copy(), 10 * np.log10(clippedOrdi), inDbm=True)
 
-    def __binMathHelper(self, other):
+    def _binMathHelper(self, other):
         ''' Adds a check to make sure lin/db is in the same state '''
         if type(other) is type(self) and other.inDbm is not self.inDbm:
             raise Exception('Can not do binary math on Spectra in different formats')
-        return super().__binMathHelper(other)
+        return super()._binMathHelper(other)
 
     def simplePlot(self, *args, livePlot=False, **kwargs):
         ''' More often then not, this is db vs. wavelength, so label it
@@ -1012,11 +1154,84 @@ class Spectrum(MeasuredFunction):
         kwargs['isDb'] = True
         return MeasuredFunction.findResonanceFeatures(self.db(), **kwargs)
 
+    def peakWavelength(self):
+        ''' Wavelength at maximum optical power.
+
+            Returns:
+                float: wavelength (nm) at the peak
+        '''
+        return self.absc[np.argmax(self.db().ordi)]
+
+    def bandwidth(self, dB_below_peak=3.0):
+        ''' N-dB bandwidth of the spectrum.
+
+            Finds where the dB spectrum crosses (peak - dB_below_peak) and
+            returns the width between the first and last crossing.
+
+            Args:
+                dB_below_peak (float): dB level below peak to measure bandwidth
+
+            Returns:
+                float: bandwidth in nm
+        '''
+        db_spec = self.db()
+        peak_power = np.max(db_spec.ordi)
+        threshold = peak_power - abs(dB_below_peak)
+        crossings = db_spec.zeroCrossings(level=threshold)
+        if len(crossings) < 2:
+            return 0.0
+        return crossings[-1] - crossings[0]
+
+    def totalPower(self):
+        ''' Integrated optical power.
+
+            Returns:
+                float: total power (integral of linear spectrum)
+        '''
+        return self.lin().integrate()
+
+    def osnr(self, signal_bw=0.1, noise_bw=0.1, noise_offset=None):
+        ''' Optical signal-to-noise ratio.
+
+            Measures signal power around the peak vs noise power at an offset.
+
+            Args:
+                signal_bw (float): bandwidth (nm) around the peak for signal measurement
+                noise_bw (float): bandwidth (nm) for noise measurement
+                noise_offset (float): offset (nm) from peak for noise measurement.
+                    Defaults to 5x signal_bw.
+
+            Returns:
+                float: OSNR in dB
+        '''
+        if noise_offset is None:
+            noise_offset = 5.0 * signal_bw
+        lin_spec = self.lin()
+        peak_nm = self.peakWavelength()
+
+        signal_seg = [peak_nm - signal_bw / 2, peak_nm + signal_bw / 2]
+        signal_power = lin_spec.crop(signal_seg).integrate()
+
+        noise_seg = [peak_nm + noise_offset - noise_bw / 2,
+                     peak_nm + noise_offset + noise_bw / 2]
+        noise_power = lin_spec.crop(noise_seg).integrate()
+
+        if noise_power <= 0:
+            return float('inf')
+        return 10.0 * np.log10(signal_power / noise_power)
+
     def GHz(self):
         ''' Convert to SpectrumGHz '''
-        GHz = 299_792_458 / self.absc
-        ordi = np.copy(self.ordi)
-        return SpectrumGHz(GHz, ordi, inDbm=self.inDbm)
+        GHz = _C_NM_GHZ / self.absc
+        sort_idx = np.argsort(GHz)
+        return SpectrumGHz(GHz[sort_idx], self.ordi[sort_idx].copy(), inDbm=self.inDbm)
+
+    def __repr__(self):
+        fmt = 'dB' if self.inDbm else 'lin'
+        try:
+            return "{}({:d} pts, {})".format(self.__class__.__qualname__, len(self), fmt)
+        except TypeError:
+            return "{}({})".format(self.__class__.__qualname__, fmt)
 
 
 class SpectrumGHz(Spectrum):
@@ -1044,10 +1259,10 @@ class SpectrumGHz(Spectrum):
         plt.ylabel('Transmission ({})'.format('dB' if self.inDbm else 'lin'))
 
     def nm(self):
-        ''' Convert to Spectrum'''
-        nm = 299_792_458 / self.absc
-        ordi = np.copy(self.ordi)
-        return Spectrum(nm, ordi, inDbm=self.inDbm)
+        ''' Convert to Spectrum '''
+        nm = _C_NM_GHZ / self.absc
+        sort_idx = np.argsort(nm)
+        return Spectrum(nm[sort_idx], self.ordi[sort_idx].copy(), inDbm=self.inDbm)
 
 
 class Waveform(MeasuredFunction):
@@ -1171,6 +1386,12 @@ class Waveform(MeasuredFunction):
             display.clear_output(wait=True)
         return curve
 
+    def __repr__(self):
+        try:
+            return "{}({:d} pts, {})".format(self.__class__.__qualname__, len(self), self.unit)
+        except TypeError:
+            return "{}({})".format(self.__class__.__qualname__, self.unit)
+
     @classmethod
     def pulse(cls, tArr, tOn, tOff):
         vForm = np.zeros(len(tArr))
@@ -1258,3 +1479,182 @@ class Waveform(MeasuredFunction):
         dt = 1.0 / (baud_rate * samples_per_symbol)
         t = np.arange(len(v)) * dt
         return cls(t, v, unit='a.u.')
+
+    # Analysis methods
+
+    def foldToEye(self, symbol_period, n_symbols=None):
+        ''' Fold the waveform into an eye diagram.
+
+            Each symbol period becomes a separate trace in a FunctionBundle.
+
+            Args:
+                symbol_period (float): duration of one symbol in seconds
+                n_symbols (int): number of symbols to fold. Defaults to all complete symbols.
+
+            Returns:
+                FunctionBundle: each element is one symbol period
+        '''
+        from .two_dim import FunctionBundle
+        t0 = self.absc[0]
+        total_duration = self.absc[-1] - t0
+        max_symbols = int(total_duration / symbol_period)
+        if n_symbols is None:
+            n_symbols = max_symbols
+        else:
+            n_symbols = min(n_symbols, max_symbols)
+
+        traces = []
+        eye_t = np.linspace(0, symbol_period, int(symbol_period / np.mean(np.diff(self.absc))) + 1)
+        for i in range(n_symbols):
+            start = t0 + i * symbol_period
+            end = start + symbol_period
+            segment = self.crop([start, end])
+            # Remap to [0, symbol_period]
+            trace = MeasuredFunction(segment.absc - start, segment.ordi)
+            traces.append(MeasuredFunction(eye_t, trace(eye_t)))
+        return FunctionBundle(traces)
+
+    def _transitionTime(self, low_pct, high_pct, rising):
+        ''' Helper for rise/fall time measurement.
+
+            Args:
+                low_pct (float): lower threshold fraction (0-1)
+                high_pct (float): upper threshold fraction (0-1)
+                rising (bool): True for rise time, False for fall time
+
+            Returns:
+                float: transition time
+        '''
+        lo = np.min(self.ordi)
+        hi = np.max(self.ordi)
+        amplitude = hi - lo
+        low_level = lo + low_pct * amplitude
+        high_level = lo + high_pct * amplitude
+
+        low_crossings = self.zeroCrossings(level=low_level)
+        high_crossings = self.zeroCrossings(level=high_level)
+
+        if len(low_crossings) == 0 or len(high_crossings) == 0:
+            return 0.0
+
+        times = []
+        if rising:
+            for lc in low_crossings:
+                # Find the next high crossing after this low crossing
+                candidates = high_crossings[high_crossings > lc]
+                if len(candidates) > 0:
+                    times.append(candidates[0] - lc)
+        else:
+            for hc in high_crossings:
+                # Find the next low crossing after this high crossing
+                candidates = low_crossings[low_crossings > hc]
+                if len(candidates) > 0:
+                    times.append(candidates[0] - hc)
+
+        if len(times) == 0:
+            return 0.0
+        return np.median(times)
+
+    def riseTime(self, low_pct=0.1, high_pct=0.9):
+        ''' Measure the 10-90% (or custom) rise time.
+
+            Returns the median rise time across all detected rising edges.
+
+            Args:
+                low_pct (float): lower threshold as fraction of amplitude
+                high_pct (float): upper threshold as fraction of amplitude
+
+            Returns:
+                float: rise time in abscissa units
+        '''
+        return self._transitionTime(low_pct, high_pct, rising=True)
+
+    def fallTime(self, low_pct=0.1, high_pct=0.9):
+        ''' Measure the 10-90% (or custom) fall time.
+
+            Returns the median fall time across all detected falling edges.
+
+            Args:
+                low_pct (float): lower threshold as fraction of amplitude
+                high_pct (float): upper threshold as fraction of amplitude
+
+            Returns:
+                float: fall time in abscissa units
+        '''
+        return self._transitionTime(low_pct, high_pct, rising=False)
+
+    def snr(self):
+        ''' Signal-to-noise ratio in dB.
+
+            Computed as 20*log10(mean / std) on the ordinate.
+
+            Returns:
+                float: SNR in dB
+        '''
+        mean_val = np.mean(self.ordi)
+        std_val = np.std(self.ordi)
+        if std_val == 0:
+            return float('inf')
+        return 20.0 * np.log10(abs(mean_val) / std_val)
+
+    def qFactor(self, n_levels=2):
+        ''' Q-factor from histogram level separation.
+
+            Uses histogram peak detection to find level means and standard
+            deviations. For a 2-level signal, Q = (mu1 - mu0) / (sigma0 + sigma1).
+
+            Args:
+                n_levels (int): number of amplitude levels (default 2 for NRZ)
+
+            Returns:
+                float: Q-factor (linear)
+        '''
+        from scipy.signal import find_peaks as sp_find_peaks
+
+        hist = self.histogram(bins=100, density=True)
+        # Find peaks in the histogram
+        peak_indices, _ = sp_find_peaks(hist.ordi, distance=len(hist) // (n_levels + 1))
+
+        if len(peak_indices) < 2:
+            # Fallback: split ordinate at midpoint
+            mid = (np.min(self.ordi) + np.max(self.ordi)) / 2.0
+            low_vals = self.ordi[self.ordi < mid]
+            high_vals = self.ordi[self.ordi >= mid]
+            if len(low_vals) == 0 or len(high_vals) == 0:
+                return 0.0
+            mu0, sigma0 = np.mean(low_vals), np.std(low_vals)
+            mu1, sigma1 = np.mean(high_vals), np.std(high_vals)
+        else:
+            # Use the two most prominent peaks
+            peak_centers = hist.absc[peak_indices]
+            sorted_centers = np.sort(peak_centers)
+            boundaries = (sorted_centers[:-1] + sorted_centers[1:]) / 2.0
+
+            # For 2-level: split at boundary
+            boundary = boundaries[0]
+            low_vals = self.ordi[self.ordi < boundary]
+            high_vals = self.ordi[self.ordi >= boundary]
+            mu0, sigma0 = np.mean(low_vals), np.std(low_vals)
+            mu1, sigma1 = np.mean(high_vals), np.std(high_vals)
+
+        denom = sigma0 + sigma1
+        if denom == 0:
+            return float('inf')
+        return abs(mu1 - mu0) / denom
+
+    def estimateBER(self, n_levels=2):
+        ''' Estimate bit error rate from Q-factor.
+
+            BER = 0.5 * erfc(Q / sqrt(2))
+
+            Args:
+                n_levels (int): number of amplitude levels
+
+            Returns:
+                float: estimated BER
+        '''
+        from scipy.special import erfc
+        Q = self.qFactor(n_levels=n_levels)
+        if Q == float('inf'):
+            return 0.0
+        return 0.5 * erfc(Q / np.sqrt(2.0))
