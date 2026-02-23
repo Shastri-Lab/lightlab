@@ -198,31 +198,54 @@ class Keithley_2606B_SMU(VISAInstrumentDriver):
         self._tcpsocket.disconnect()
         self._tcpsocket.connect()
 
-    def _tcp_query_unlocked(self, queryStr):
-        """Execute a query over the TCP socket.
-        Caller must hold _tcp_lock.
-        """
-        with self._tcpsocket.connected() as s:
-            s.send(queryStr)
+    # def _tcp_query_unlocked(self, queryStr):
+    #     """Execute a query over the TCP socket.
+    #     Caller must hold _tcp_lock.
+    #     """
+    #     with self._tcpsocket.connected() as s:
+    #         s.send(queryStr)
 
-            raw_socket = self._tcpsocket._socket
-            old_timeout = raw_socket.gettimeout()
-            try:
-                raw_socket.settimeout(self.MAGIC_TIMEOUT)
-                received_msg = ""
-                i = 0
-                while i < 1024:  # avoid infinite loop
-                    recv_str = s.recv(1024)
-                    if not recv_str:
-                        raise ConnectionResetError("Remote closed connection")
-                    received_msg += recv_str
-                    if recv_str.endswith("\n"):
-                        break
-                    raw_socket.settimeout(1)
-                    i += 1
-            finally:
-                raw_socket.settimeout(old_timeout)
-            return received_msg.rstrip()
+    #         raw_socket = self._tcpsocket._socket
+    #         old_timeout = raw_socket.gettimeout()
+    #         try:
+    #             raw_socket.settimeout(self.MAGIC_TIMEOUT)
+    #             received_msg = ""
+    #             i = 0
+    #             while i < 1024:  # avoid infinite loop
+    #                 recv_str = s.recv(1024)
+    #                 if not recv_str:
+    #                     raise ConnectionResetError("Remote closed connection")
+    #                 received_msg += recv_str
+    #                 if recv_str.endswith("\n"):
+    #                     break
+    #                 raw_socket.settimeout(1)
+    #                 i += 1
+    #         finally:
+    #             raw_socket.settimeout(old_timeout)
+    #         return received_msg.rstrip()
+        
+    def _tcp_query_unlocked(self, queryStr):
+        self._tcpsocket.connect()
+        self._tcpsocket._send(self._tcpsocket._socket, queryStr)
+        
+        raw_socket = self._tcpsocket._socket
+        old_timeout = raw_socket.gettimeout()
+        try:
+            raw_socket.settimeout(self.MAGIC_TIMEOUT)
+            received_msg = ""
+            i = 0
+            while i < 1024:
+                recv_str = self._tcpsocket._recv(raw_socket)
+                if not recv_str:
+                    raise ConnectionResetError("Remote closed connection")
+                received_msg += recv_str
+                if recv_str.endswith("\n"):
+                    break
+                raw_socket.settimeout(1)
+                i += 1
+        finally:
+            raw_socket.settimeout(old_timeout)
+        return received_msg.rstrip()
 
     def _tcp_query(self, queryStr):
         """Query with lock and automatic reconnect on broken pipe."""
@@ -234,11 +257,16 @@ class Keithley_2606B_SMU(VISAInstrumentDriver):
                 self._reconnect()
                 return self._tcp_query_unlocked(queryStr)
 
+    # def _tcp_write_unlocked(self, writeStr):
+    #     """Execute a write over the TCP socket. Caller must hold _tcp_lock."""
+    #     logger.debug("Sending '%s'", writeStr)
+    #     with self._tcpsocket.connected() as s:
+    #         s.send(writeStr)
+
     def _tcp_write_unlocked(self, writeStr):
-        """Execute a write over the TCP socket. Caller must hold _tcp_lock."""
         logger.debug("Sending '%s'", writeStr)
-        with self._tcpsocket.connected() as s:
-            s.send(writeStr)
+        self._tcpsocket.connect()  # ensure connected (no-op if already)
+        self._tcpsocket._send(self._tcpsocket._socket, writeStr)
 
     def _tcp_write(self, writeStr):
         """Write with lock and automatic reconnect on broken pipe."""
