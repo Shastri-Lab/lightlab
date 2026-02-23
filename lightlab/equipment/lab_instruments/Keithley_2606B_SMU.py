@@ -48,16 +48,36 @@ from lightlab import logger
 _connection_pool = {}  # (ip_address, port) -> {'conn': TCPSocketConnection, 'lock': threading.Lock()}
 
 
+# def _get_shared_connection(ip_address, port, timeout):
+#     """Get or create a shared TCP connection and lock for a given IP:port."""
+#     key = (ip_address, port)
+#     if key not in _connection_pool:
+#         _connection_pool[key] = {
+#             'conn': TCPSocketConnection(
+#                 ip_address=ip_address,
+#                 port=port,
+#                 timeout=timeout,
+#             ),
+#             'lock': threading.Lock(),
+#         }
+#     return _connection_pool[key]['conn'], _connection_pool[key]['lock']
+
 def _get_shared_connection(ip_address, port, timeout):
-    """Get or create a shared TCP connection and lock for a given IP:port."""
     key = (ip_address, port)
+    if key in _connection_pool:
+        conn = _connection_pool[key]['conn']
+        # Check if the existing socket is actually alive
+        if conn._socket is not None:
+            try:
+                conn._socket.getpeername()
+            except OSError:
+                # Dead socket, remove from pool
+                conn.disconnect()
+                del _connection_pool[key]
+    
     if key not in _connection_pool:
         _connection_pool[key] = {
-            'conn': TCPSocketConnection(
-                ip_address=ip_address,
-                port=port,
-                timeout=timeout,
-            ),
+            'conn': TCPSocketConnection(ip_address=ip_address, port=port, timeout=timeout),
             'lock': threading.Lock(),
         }
     return _connection_pool[key]['conn'], _connection_pool[key]['lock']
